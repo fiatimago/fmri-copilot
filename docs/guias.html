@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guías · FMRI Assistant</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* Estilos propios de la página de guías. Todo va dentro de .guias-layout
+     para no pisar css/style.css (el menú y el resto del sitio quedan iguales). */
+  .guias-layout {
+    --panel: #ffffff;
+    --texto: #1f2328;
+    --suave: #5f6670;
+    --borde: #e2e4e8;
+    --acento: #2563eb;
+    --acento-suave: #e8effd;
+    --codigo-fondo: #f1f3f5;
+    --aviso-fondo: #fff8e6;
+    --aviso-borde: #e6a700;
+    color: var(--texto);
+    line-height: 1.6;
+  }
+  .guias-layout * { box-sizing: border-box; }
+
+  .btn-menu {
+    display: none; width: 100%;
+    background: var(--panel); border: 1px solid var(--borde); border-radius: 8px;
+    color: var(--texto); font-size: 15px; padding: 8px 12px; cursor: pointer; text-align: left;
+  }
+
+  /* ---- Tres columnas ---- */
+  .guias-layout {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr) 220px;
+    gap: 32px;
+    max-width: 1400px; margin: 0 auto; padding: 24px 16px;
+  }
+  .lista-guias, .indice {
+    position: sticky; top: 80px;
+    align-self: start;
+    max-height: calc(100vh - 90px); overflow-y: auto;
+    font-size: 14px;
+  }
+  .lista-guias a, .indice a {
+    display: block; padding: 5px 10px; border-radius: 6px;
+    color: var(--texto); text-decoration: none;
+  }
+  .lista-guias a:hover, .indice a:hover { background: var(--acento-suave); }
+  .lista-guias a.activa { background: var(--acento-suave); color: var(--acento); font-weight: 600; }
+  .indice a { color: var(--suave); }
+  .indice a.nivel3 { padding-left: 24px; font-size: 13px; }
+  .grupo {
+    margin: 16px 10px 4px; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--suave);
+  }
+  .grupo:first-child { margin-top: 0; }
+
+  /* ---- Contenido de la guía ---- */
+  .contenido {
+    background: var(--panel);
+    border: 1px solid var(--borde); border-radius: 10px;
+    padding: 28px 36px; min-width: 0;
+  }
+  .contenido h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+  .contenido h2 {
+    font-size: 21px; margin: 40px 0 12px; padding-top: 20px;
+    border-top: 1px solid var(--borde);
+  }
+  .contenido h3 { font-size: 17px; margin: 28px 0 8px; }
+  .contenido h1, .contenido h2, .contenido h3 { scroll-margin-top: 90px; }
+  .contenido hr { display: none; }   /* las guías usan --- entre pasos; el borde de h2 ya separa */
+  .contenido a { color: var(--acento); }
+  .meta { color: var(--suave); font-size: 13px; margin: 0 0 20px; }
+  .estado { color: var(--suave); }
+  .estado.error { color: #c0392b; }
+
+  .contenido code {
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--codigo-fondo); padding: 1px 5px; border-radius: 4px;
+  }
+  .bloque { position: relative; margin: 12px 0; }
+  .bloque pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    background: var(--codigo-fondo); border: 1px solid var(--borde); border-radius: 8px;
+  }
+  .bloque pre code { background: none; padding: 0; }
+  .copiar {
+    position: absolute; top: 8px; right: 8px;
+    font: 12px system-ui, sans-serif; padding: 4px 10px;
+    background: var(--panel); color: var(--texto);
+    border: 1px solid var(--borde); border-radius: 6px; cursor: pointer;
+    opacity: .85;
+  }
+  .copiar:hover { opacity: 1; border-color: var(--acento); }
+
+  .contenido blockquote {
+    margin: 16px 0; padding: 10px 16px;
+    background: var(--aviso-fondo); border-left: 4px solid var(--aviso-borde);
+    border-radius: 0 8px 8px 0;
+  }
+  .contenido blockquote p { margin: 6px 0; }
+
+  .tabla { overflow-x: auto; margin: 16px 0; }
+  .contenido table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .contenido th, .contenido td { border: 1px solid var(--borde); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .contenido th { background: var(--codigo-fondo); }
+
+  .contenido li { margin: 3px 0; }
+  .contenido input[type=checkbox] { margin-right: 6px; }
+
+  /* ---- Pantallas medianas: sin índice derecho ---- */
+  @media (max-width: 1100px) {
+    .guias-layout { grid-template-columns: 220px minmax(0, 1fr); }
+    .indice { display: none; }
+  }
+  /* ---- Celular: lista de guías como menú desplegable ---- */
+  @media (max-width: 760px) {
+    .guias-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+    .btn-menu { display: block; }
+    .lista-guias {
+      display: none; position: static; max-height: none;
+      background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 12px 6px;
+    }
+    .lista-guias.abierta { display: block; }
+    .contenido { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="nav-left">
+      <a href="index.html" class="nav-brand">
+        <img src="assets/logo.png" alt="Logo de FMRI Assistant" class="nav-logo">
+        FMRI ASSISTANT
+      </a>
+      <a href="nueva-sesion.html" class="nav-link">Nueva sesión</a>
+      <a href="investigacion.html" class="nav-link">Investigación</a>
+      <a href="guias.html" class="nav-link active">Guías</a>
+    </div>
+  </nav>
+
+<div class="guias-layout">
+  <button id="btn-menu" class="btn-menu" aria-label="Mostrar guías">☰ Guías</button>
+  <nav id="lista-guias" class="lista-guias"></nav>
+  <main id="contenido" class="contenido"><p class="estado">Cargando…</p></main>
+  <aside id="indice" class="indice"></aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+// Las guías se listan en guias/guias.json (el sitio no puede descubrir archivos solo).
+// Para agregar una guía: subir el .md a guias/ y agregar su línea al JSON.
+const MANIFIESTO = 'guias/guias.json';
+let guias = [];
+let guiaActual = null;
+
+// "Paso 8 — Preprocesamiento (fMRIPrep)" -> "paso-8-preprocesamiento-fmriprep"
+function slug(texto) {
+  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// URL: guias.html#procesamiento/paso-8-preprocesamiento-fmriprep
+function leerHash() {
+  const [id, ancla] = decodeURIComponent(location.hash.slice(1)).split('/');
+  return { id, ancla };
+}
+
+function mostrarError(mensaje) {
+  document.getElementById('contenido').innerHTML = `<p class="estado error">${mensaje}</p>`;
+}
+
+function pintarLista() {
+  const nav = document.getElementById('lista-guias');
+  nav.innerHTML = '';
+  const grupos = {};
+  guias.forEach(g => (grupos[g.grupo] ||= []).push(g));
+  for (const [grupo, items] of Object.entries(grupos)) {
+    const p = document.createElement('p');
+    p.className = 'grupo';
+    p.textContent = grupo;
+    nav.append(p);
+    items.forEach(g => {
+      const a = document.createElement('a');
+      a.href = '#' + g.id;
+      a.textContent = g.titulo;
+      a.dataset.id = g.id;
+      nav.append(a);
+    });
+  }
+}
+
+function marcarActiva(id) {
+  document.querySelectorAll('#lista-guias a').forEach(a =>
+    a.classList.toggle('activa', a.dataset.id === id));
+}
+
+async function copiar(texto, boton) {
+  try {
+    await navigator.clipboard.writeText(texto);
+  } catch {
+    const t = document.createElement('textarea');
+    t.value = texto;
+    document.body.append(t);
+    t.select();
+    document.execCommand('copy');
+    t.remove();
+  }
+  boton.textContent = 'Copiado ✓';
+  setTimeout(() => (boton.textContent = 'Copiar'), 1500);
+}
+
+// Después de convertir el markdown: ids en los títulos, índice, botones de copiar y tablas con scroll.
+function prepararContenido(id) {
+  const main = document.getElementById('contenido');
+  const indice = document.getElementById('indice');
+  indice.innerHTML = '<p class="grupo">En esta guía</p>';
+  const usados = {};
+
+  main.querySelectorAll('h1, h2, h3').forEach(h => {
+    let s = slug(h.textContent) || 'seccion';
+    usados[s] = (usados[s] || 0) + 1;
+    if (usados[s] > 1) s += '-' + usados[s];
+    h.id = 'sec-' + s;
+    if (h.tagName === 'H1') return;
+    const a = document.createElement('a');
+    a.href = '#' + id + '/' + s;
+    a.textContent = h.textContent;
+    if (h.tagName === 'H3') a.className = 'nivel3';
+    indice.append(a);
+  });
+
+  main.querySelectorAll('pre').forEach(pre => {
+    const envoltura = document.createElement('div');
+    envoltura.className = 'bloque';
+    pre.replaceWith(envoltura);
+    envoltura.append(pre);
+    const boton = document.createElement('button');
+    boton.className = 'copiar';
+    boton.textContent = 'Copiar';
+    // Sin el salto de línea final: así la última línea espera Enter y no se ejecuta sola.
+    boton.addEventListener('click', () =>
+      copiar(pre.textContent.replace(/\n$/, ''), boton));
+    envoltura.append(boton);
+  });
+
+  main.querySelectorAll('table').forEach(tabla => {
+    const envoltura = document.createElement('div');
+    envoltura.className = 'tabla';
+    tabla.replaceWith(envoltura);
+    envoltura.append(tabla);
+  });
+
+  main.querySelectorAll('a[href^="http"]').forEach(a => {
+    a.target = '_blank';
+    a.rel = 'noopener';
+  });
+}
+
+async function cargarGuia(id, ancla) {
+  const guia = guias.find(g => g.id === id) || guias[0];
+
+  if (guiaActual !== guia.id) {
+    const main = document.getElementById('contenido');
+    main.innerHTML = '<p class="estado">Cargando…</p>';
+    try {
+      const r = await fetch('guias/' + guia.archivo, { cache: 'no-cache' });
+      if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+      const md = await r.text();
+      main.innerHTML = marked.parse(md);
+      const h1 = main.querySelector('h1');
+      const meta = document.createElement('p');
+      meta.className = 'meta';
+      meta.textContent = `Versión ${guia.version} · ${guia.fecha}`;
+      h1 ? h1.after(meta) : main.prepend(meta);
+    } catch (e) {
+      mostrarError(`No se pudo cargar <code>guias/${guia.archivo}</code> (${e.message}).`);
+      return;
+    }
+    prepararContenido(guia.id);
+    guiaActual = guia.id;
+    document.title = guia.titulo + ' · Guías · FMRI Assistant';
+  }
+
+  marcarActiva(guia.id);
+  document.getElementById('lista-guias').classList.remove('abierta');
+
+  const destino = ancla && document.getElementById('sec-' + ancla);
+  if (destino) destino.scrollIntoView();
+  else window.scrollTo(0, 0);
+}
+
+async function iniciar() {
+  if (location.protocol === 'file:') {
+    mostrarError('Esta página no funciona abriendo el archivo con doble clic. ' +
+      'Ábrela con un servidor local: <code>python3 -m http.server 8000</code> y entra a ' +
+      '<code>http://localhost:8000/guias.html</code>.');
+    return;
+  }
+  try {
+    const r = await fetch(MANIFIESTO, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+    guias = await r.json();
+  } catch (e) {
+    mostrarError(`No se pudo leer <code>${MANIFIESTO}</code> (${e.message}).`);
+    return;
+  }
+  pintarLista();
+  const { id, ancla } = leerHash();
+  cargarGuia(id, ancla);
+}
+
+window.addEventListener('hashchange', () => {
+  const { id, ancla } = leerHash();
+  cargarGuia(id, ancla);
+});
+document.getElementById('btn-menu').addEventListener('click', () =>
+  document.getElementById('lista-guias').classList.toggle('abierta'));
+
+iniciar();
+</script>
+</body>
+</html>
