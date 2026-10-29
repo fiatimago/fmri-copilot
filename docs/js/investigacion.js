@@ -1262,3 +1262,38 @@ btnContinueNext.addEventListener("click", () => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && isPlaying) tick();
 });
+
+// ================== PROTECCIÓN DE LA SESIÓN AL CAMBIAR DE PÁGINA ==================
+// Cada sección del sitio es una página aparte: salir de esta (clic en la
+// barra, recargar, cerrar) borra la secuencia armada y el registro del
+// reporte, y corta el audio, que sale de esta ventana. Por eso, mientras haya
+// una sesión armada:
+//   1. Los enlaces de la barra (Guías, Home, la otra página) se abren en OTRA
+//      pestaña; el enlace a esta misma página no hace nada.
+//   2. Si igual se intenta salir (recargar, cerrar, escribir otra dirección),
+//      el navegador pide confirmación (el texto del aviso lo pone él).
+//   3. Si se confirma la salida, la pantalla del paciente se pone en negro
+//      en vez de quedarse con un video sin control y sin audio.
+function hasActiveSession() {
+  return sequence.length > 0 || sessionLog.length > 0;
+}
+
+document.querySelectorAll(".navbar a[href]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    if (!hasActiveSession()) return;
+    event.preventDefault();
+    const target = new URL(link.href, window.location.href);
+    if (target.pathname === window.location.pathname) return;
+    window.open(target.href, "_blank", "noopener");
+  });
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (!hasActiveSession()) return;
+  event.preventDefault();
+  event.returnValue = ""; // necesario en algunos navegadores para mostrar el aviso
+});
+
+window.addEventListener("pagehide", () => {
+  if (presenterChannel) presenterChannel.postMessage({ type: "show-blank" });
+});
