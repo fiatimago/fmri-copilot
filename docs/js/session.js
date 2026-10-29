@@ -27,6 +27,7 @@ const progressLabel = document.getElementById("progress-label");
 
 const restScreen = document.getElementById("rest-screen");
 const btnContinueNext = document.getElementById("btn-continue-next");
+const btnStartTask = document.getElementById("btn-start-task");
 
 const btnPrevTask = document.getElementById("btn-prev-task");
 const btnNextTask = document.getElementById("btn-next-task");
@@ -436,6 +437,7 @@ function updateSequenceUI() {
 function loadTask(taskId) {
   currentTaskId = taskId;
   restScreen.hidden = true;
+  btnStartTask.hidden = true;
   const def = resolveTaskDef(taskId);
 
   const startWithExplainer = explainersEnabled && !!def.explainerYoutubeId;
@@ -533,12 +535,8 @@ function onPlayerStateChange(event) {
   } else if (event.data === YT.PlayerState.ENDED) {
     clearInterval(presenterSyncInterval);
     if (currentSegment === "explainer") {
-      const def = resolveTaskDef(currentTaskId);
       currentSegment = "main";
-      // Primero avisar a la pantalla del paciente y luego cargar: así el
-      // "play" que dispara loadVideoById siempre le llega después del cambio de video.
-      postToPresenter({ type: "show-video", videoId: def.youtubeId });
-      player.loadVideoById(def.youtubeId);
+      showPauseBeforeTask();
       updateNowPlayingLabel();
     } else {
       showRestScreen();
@@ -552,10 +550,33 @@ function showRestScreen() {
   const index = sequence.indexOf(currentTaskId);
   const isLast = index === -1 || index >= sequence.length - 1;
   btnContinueNext.hidden = isLast;
+  btnStartTask.hidden = true;
   restScreen.hidden = false;
   postToPresenter({ type: "show-blank" });
   updatePauseButtonState();
 }
+
+// Pantalla negra entre el video explicativo y la tarea: la tarea no arranca
+// sola, el técnico la inicia con "Iniciar tarea" cuando el paciente esté listo.
+function showPauseBeforeTask() {
+  btnContinueNext.hidden = true;
+  btnStartTask.hidden = false;
+  restScreen.hidden = false;
+  postToPresenter({ type: "show-blank" });
+  updatePauseButtonState();
+}
+
+btnStartTask.addEventListener("click", whenReady(() => {
+  const def = resolveTaskDef(currentTaskId);
+  if (!def) return;
+  restScreen.hidden = true;
+  btnStartTask.hidden = true;
+  // Primero avisar a la pantalla del paciente y luego cargar: así el
+  // "play" que dispara loadVideoById siempre le llega después del cambio de video.
+  postToPresenter({ type: "show-video", videoId: def.youtubeId });
+  player.loadVideoById(def.youtubeId);
+  btnStartTask.blur();
+}));
 
 // ================== ATAJO DE BARRA ESPACIADORA (opcional) ==================
 // No es un control visual — es solo un atajo de teclado. Si prefieres depender
@@ -567,6 +588,9 @@ function togglePlayPause() {
 
 document.addEventListener("keydown", (event) => {
   if (event.code !== "Space" || !isPlayerReady) return;
+  // En las pantallas negras (pausa antes de la tarea / descanso) la barra
+  // espaciadora no hace nada: se avanza solo con los botones.
+  if (!restScreen.hidden) return;
   const tag = document.activeElement.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
   event.preventDefault();

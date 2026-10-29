@@ -113,7 +113,7 @@ let handedness = "diestro";
 let currentSegment = "images"; // "explainer" | "images" — qué se está mostrando en el escenario
 let ytPlayer;
 let isYtPlayerReady = false;
-let pendingAutoStartAfterPreload = false; // el explicativo terminó antes de que las imágenes cargaran
+let pendingAutoStartAfterPreload = false; // se pulsó "Iniciar tarea" antes de que las imágenes terminaran de cargar
 let presenterSyncInterval = null; // reenvía la posición del explicativo a la pantalla del paciente cada 3s
 
 // ================== DOM ==================
@@ -144,6 +144,7 @@ const youtubeStage = document.getElementById("youtube-player-inv-wrapper"); // e
 const customControls = document.getElementById("custom-controls");
 const restScreen = document.getElementById("rest-screen-inv");
 const btnContinueNext = document.getElementById("btn-continue-next-inv");
+const btnStartTask = document.getElementById("btn-start-task-inv");
 
 const btnPrevInstance = document.getElementById("btn-prev-instance");
 const btnNextInstance = document.getElementById("btn-next-instance");
@@ -671,6 +672,7 @@ function loadInstance(instanceId) {
   const myGeneration = ++stageGeneration;
   currentInstanceId = instanceId;
   restScreen.hidden = true;
+  btnStartTask.hidden = true;
   stopAnyPlayback();
 
   const instance = sequence.find((i) => i.instanceId === instanceId);
@@ -696,7 +698,9 @@ function loadInstance(instanceId) {
     imagesPreloaded = true;
     if (!hasMissing) updateNowPlayingLabel(); // restaura "(1/3)" si el aviso de precarga lo tapó
 
-    if (currentSegment === "images") {
+    // Si está en la pantalla negra previa a la tarea, no se muestra nada
+    // todavía: la primera imagen aparece al pulsar "Iniciar tarea".
+    if (currentSegment === "images" && restScreen.hidden) {
       [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
       loadVisualForStep(instance, 0);
     }
@@ -849,31 +853,45 @@ function onYtPlayerStateChange(event) {
   }
 }
 
-// El explicativo terminó: pasa directo a la secuencia de imágenes, sin
-// pantalla intermedia. Si las imágenes ya están listas, arranca de una vez
-// (comportamiento "fluido"); si no, queda pendiente y arranca sola en
-// cuanto termine de precargar.
+// El explicativo terminó: se muestra una pantalla negra (también en la
+// pantalla del paciente) y la secuencia de imágenes NO arranca sola. El
+// técnico la inicia con "Iniciar tarea" cuando el paciente esté listo.
 function finishExplainer() {
   const instance = getCurrentInstance();
   if (!instance) return;
   currentSegment = "images";
   isPlaying = false;
-  showImageStage();
   updateNowPlayingLabel();
+  updateSequenceUI();
+
+  btnContinueNext.hidden = true;
+  btnStartTask.hidden = false;
+  restScreen.hidden = false;
+  if (presenterChannel) presenterChannel.postMessage({ type: "show-blank" });
+}
+
+btnStartTask.addEventListener("click", () => {
+  const instance = getCurrentInstance();
+  if (!instance) return;
+  restScreen.hidden = true;
+  btnStartTask.hidden = true;
+  showImageStage();
+  btnStartTask.blur();
 
   if (imagesPreloaded) {
     [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
     loadVisualForStep(instance, 0);
     startPlayback();
   } else {
+    // Las imágenes aún cargan: arranca sola en cuanto termine la precarga.
     pendingAutoStartAfterPreload = true;
   }
-}
+});
 
 
 // ================== CONTROLES DE REPRODUCCIÓN ==================
 btnPlayPause.addEventListener("click", () => {
-  if (currentSegment !== "images" || !imagesPreloaded) return;
+  if (currentSegment !== "images" || !imagesPreloaded || !restScreen.hidden) return;
   isPlaying ? pausePlayback() : startPlayback();
 });
 btnPauseImagesNav.addEventListener("click", () => btnPlayPause.click());
@@ -995,6 +1013,7 @@ function finishCurrentInstance() {
   const index = sequence.findIndex((i) => i.instanceId === currentInstanceId);
   const isLast = index === -1 || index >= sequence.length - 1;
   btnContinueNext.hidden = isLast;
+  btnStartTask.hidden = true;
   restScreen.hidden = false;
   if (presenterChannel) presenterChannel.postMessage({ type: "show-blank" });
 }
