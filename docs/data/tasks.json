@@ -4,64 +4,48 @@
       "id": "muni",
       "title": "Tarea motora unilateral",
       "es": {
-        "youtubeId": "RTsc1ZFW7Ng",
-        "explainerYoutubeId": "gbKXa9-hnsQ",
-        "duration": "03:23",
-        "explainerDuration": "00:26"
+        "video": "videos/muni_es_tarea.mp4",
+        "explainerVideo": "videos/muni_es_explicativo.mp4"
       },
       "en": {
-        "youtubeId": "J5uAOOc1a0g",
-        "explainerYoutubeId": "ID_EXPLICATIVO_MOTOR_EN",
-        "duration": "3:20",
-        "explainerDuration": "MM:SS"
+        "video": "videos/muni_en_tarea.mp4",
+        "explainerVideo": null
       }
     },
     {
       "id": "lh",
       "title": "Tarea de lenguaje historia",
       "es": {
-        "youtubeId": "itqLOKkPK7o",
-        "explainerYoutubeId": "OpRlISuAU80",
-        "duration": "03:21",
-        "explainerDuration": "00:39"
+        "video": "videos/lh_es_tarea.mp4",
+        "explainerVideo": "videos/lh_es_explicativo.mp4"
       },
       "en": {
-        "youtubeId": "QBOhiB9NuwI",
-        "explainerYoutubeId": "ID_EXPLICATIVO_LH_EN",
-        "duration": "03:20",
-        "explainerDuration": "MM:SS"
+        "video": "videos/lh_en_tarea.mp4",
+        "explainerVideo": null
       }
     },
     {
       "id": "lvv",
       "title": "Tarea de lenguaje visoverbal",
       "es": {
-        "youtubeId": "GAqq7h9AbYg",
-        "explainerYoutubeId": "Vfw-Z2Mnh5E",
-        "duration": "05:00",
-        "explainerDuration": "00:41"
+        "video": "videos/lvv_es_tarea.mp4",
+        "explainerVideo": "videos/lvv_es_explicativo.mp4"
       },
       "en": {
-        "youtubeId": "ciAEFQRPLz0",
-        "explainerYoutubeId": "ID_EXPLICATIVO_VISOVERBAL_EN",
-        "duration": "05:00",
-        "explainerDuration": "MM:SS"
+        "video": "videos/lvv_en_tarea.mp4",
+        "explainerVideo": null
       }
     },
     {
       "id": "mev",
       "title": "Tarea de memoria episódica verbal",
       "es": {
-        "youtubeId": "p3H3GebNDHo",
-        "explainerYoutubeId": "alqz9QjoMs0",
-        "duration": "02:01",
-        "explainerDuration": "00:41"
+        "video": "videos/mev_es_tarea.mp4",
+        "explainerVideo": "videos/mev_es_explicativo.mp4"
       },
       "en": {
-        "youtubeId": "H2FaLw-i0cg",
-        "explainerYoutubeId": "ID_EXPLICATIVO_MEV_EN",
-        "duration": "02:00",
-        "explainerDuration": "MM:SS"
+        "video": "videos/mev_en_tarea.mp4",
+        "explainerVideo": null
       }
     },
     {
@@ -70,30 +54,22 @@
       "variants": {
         "diestro": {
           "es": {
-            "youtubeId": "kwSVqELYZbY",
-            "explainerYoutubeId": "pw1aiczNzLQ",
-            "duration": "03:23",
-            "explainerDuration": "00:35"
+            "video": "videos/menv_es_tarea.mp4",
+            "explainerVideo": "videos/menv_es_diestro_explicativo.mp4"
           },
           "en": {
-            "youtubeId": "kwMnQZUTUmQ",
-            "explainerYoutubeId": "ID_EXPLICATIVO_MENV_DIESTRO_EN",
-            "duration": "03:20",
-            "explainerDuration": "MM:SS"
+            "video": "videos/menv_en_tarea.mp4",
+            "explainerVideo": null
           }
         },
         "zurdo": {
           "es": {
-            "youtubeId": "kwSVqELYZbY",
-            "explainerYoutubeId": "BJApGf3vDlI",
-            "duration": "03:23",
-            "explainerDuration": "00:36"
+            "video": "videos/menv_es_tarea.mp4",
+            "explainerVideo": "videos/menv_es_zurdo_explicativo.mp4"
           },
           "en": {
-            "youtubeId": "kwMnQZUTUmQ",
-            "explainerYoutubeId": "ID_EXPLICATIVO_MENV_ZURDO_EN",
-            "duration": "03:20",
-            "explainerDuration": "MM:SS"
+            "video": "videos/menv_en_tarea.mp4",
+            "explainerVideo": null
           }
         }
       }

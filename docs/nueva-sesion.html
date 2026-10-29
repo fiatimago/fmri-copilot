@@ -33,17 +33,25 @@
                 </div>
 
                 <div class="player-section" id="player-container">
-                    <div id="youtube-player"></div>
+                    <video id="video-player" controls playsinline preload="auto"></video>
 
                     <div class="rest-screen" id="rest-screen" hidden>
                         <button id="btn-continue-next" class="btn-rest-next">Siguiente tarea</button>
+                        <button id="btn-start-task" class="btn-rest-next" hidden>Continuar a la tarea</button>
                     </div>
                 </div>
 
                 <div class="task-nav-bar">
                     <button id="btn-prev-task" class="btn-secondary" disabled title="Tarea anterior">⏮ Anterior</button>
+                    <button id="btn-pause-nav" class="btn-secondary" disabled
+                        title="Pausar/reanudar el video actual">▶</button>
                     <button id="btn-next-task" class="btn-secondary" disabled title="Siguiente tarea">Siguiente
                         ⏭</button>
+                </div>
+
+                <div class="task-nav-bar">
+                    <button id="btn-open-presenter" class="btn-secondary"
+                        title="Abre una ventana sin controles para proyectar al paciente">🖥️ Pantalla del paciente</button>
                 </div>
             </div>
 
@@ -75,6 +83,8 @@
 
                 <h3>Secuencia de la sesión</h3>
                 <p class="sequence-total" id="sequence-total-duration"></p>
+                <p class="hint" id="preload-status"></p>
+                <button id="btn-download-report" class="btn-secondary" disabled>Descargar reporte de la sesión</button>
                 <ol id="sequence-list" class="sequence-list"></ol>
                 <p id="sequence-empty-hint" class="hint">Arrastra tareas aquí para armar la secuencia. La primera se
                     carga
@@ -84,7 +94,7 @@
         </div>
     </section>
 
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="js/video-cache.js"></script>
     <script src="js/session.js"></script>
 </body>
 
