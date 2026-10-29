@@ -1,9 +1,14 @@
-console.log("investigacion.js — v4: sin pausa al ocultar la ventana, reloj en Web Worker");
+console.log("investigacion.js — v6: controles iguales a Nueva sesión (Anterior / ▶⏸ / Siguiente)");
 
 // ================== ESTADO ==================
 let allTasks = [];
 let sequence = []; // array de instancias: { instanceId, taskId, label, numBlocks, blockDuration, stimuliPerBlock, schedule }
 let currentInstanceId = null;
+// true en cuanto algo arrancó en la sesión (cualquier explicativo o
+// secuencia de imágenes). Mientras sea false, la sesión "no ha empezado" y
+// el escenario sigue siempre a la primera de la lista. Vuelve a false solo
+// si se vacía la secuencia.
+let sessionStarted = false;
 // Se incrementa cada vez que cambia qué instancia manda en pantalla (carga
 // una nueva, o se vacía la secuencia). Cualquier callback asíncrono viejo
 // (precarga de imágenes de una instancia ya borrada) se compara contra este
@@ -127,13 +132,13 @@ const btnAddInstance = document.getElementById("btn-add-instance");
 const sequenceList = document.getElementById("sequence-list-inv");
 const sequenceEmptyHint = document.getElementById("sequence-empty-hint-inv");
 const sequenceTotalLabel = document.getElementById("sequence-total-duration-inv");
+const preloadStatus = document.getElementById("preload-status-inv");
 const btnDownloadReport = document.getElementById("btn-download-report");
 
 const nowPlaying = document.getElementById("now-playing-inv");
 const currentInstanceName = document.getElementById("current-instance-name-inv");
 const progressLabel = document.getElementById("progress-label-inv");
 
-const stageContainer = document.getElementById("stage-container");
 const stageImage = document.getElementById("stage-image");
 const explainerPlayer = document.getElementById("video-player-inv"); // reproductor de los videos explicativos
 const customControls = document.getElementById("custom-controls");
@@ -148,12 +153,7 @@ const toggleExplainers = document.getElementById("toggle-explainers-inv");
 const languageButtons = document.querySelectorAll("#language-selector-inv .language-btn");
 const handednessButtons = document.querySelectorAll("#handedness-selector-inv .handedness-btn");
 
-const btnPlayPause = document.getElementById("btn-play-pause-inv");
-const btnPauseImagesNav = document.getElementById("btn-pause-images-nav"); // mismo control, atajo visible junto a Anterior/Siguiente
-const btnReset = document.getElementById("btn-reset-inv");
-const btnSkipStep = document.getElementById("btn-skip-step-inv");
-const btnExtendStep = document.getElementById("btn-extend-step-inv");
-const btnFullscreen = document.getElementById("btn-fullscreen-inv");
+const btnPauseImagesNav = document.getElementById("btn-pause-images-nav"); // ▶/⏸ junto a Anterior/Siguiente
 
 const progressBarFilled = document.getElementById("progress-bar-filled");
 
@@ -175,7 +175,10 @@ fetch("data/investigacion-tasks.json")
 // reutiliza tal cual, sin duplicar guiones ni IDs de YouTube.
 fetch("data/tasks.json")
   .then((r) => r.json())
-  .then((data) => { explainerTasks = data.tasks; })
+  .then((data) => {
+    explainerTasks = data.tasks;
+    onExplainerSettingsChanged();
+  })
   .catch((err) => console.error("No se pudo cargar tasks.json (explicativos):", err));
 
 // Resuelve el explicativo de una tarea según idioma y lateralidad actuales.
@@ -190,8 +193,18 @@ function resolveExplainerDef(taskId) {
 }
 
 // ================== AJUSTES: EXPLICATIVOS / IDIOMA / LATERALIDAD ==================
+// Cualquier cambio de explicativos/idioma/lateralidad: vuelve a medir
+// duraciones, descarga los explicativos que falten y refresca totales.
+function onExplainerSettingsChanged() {
+  explainerPathsInSequence().forEach((src) => VideoDurations.probe(src).then(updateSequenceTotalLabel));
+  preloadSequenceExplainers();
+  refreshPreloadStatus();
+  updateSequenceTotalLabel();
+}
+
 toggleExplainers.addEventListener("change", () => {
   explainersEnabled = toggleExplainers.checked;
+  onExplainerSettingsChanged();
   reloadIfPausedAndAffected();
 });
 
@@ -199,6 +212,7 @@ languageButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     language = btn.dataset.lang;
     languageButtons.forEach((b) => b.classList.toggle("active", b === btn));
+    onExplainerSettingsChanged();
     reloadIfPausedAndAffected();
   });
 });
@@ -207,6 +221,7 @@ handednessButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     handedness = btn.dataset.hand;
     handednessButtons.forEach((b) => b.classList.toggle("active", b === btn));
+    onExplainerSettingsChanged();
     reloadIfPausedAndAffected();
   });
 });
@@ -223,6 +238,39 @@ function reloadIfPausedAndAffected() {
 function formatSeconds(totalSeconds) {
   const rounded = Math.round(totalSeconds * 100) / 100;
   return rounded.toFixed(2) + "s";
+}
+
+// "m:ss"; "…" si todavía no se conoce (ej. duración de un video sin leer).
+function formatClock(totalSeconds) {
+  if (!(totalSeconds > 0)) return "…";
+  const t = Math.round(totalSeconds);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+function timeOfDay(ts) {
+  return new Date(ts).toLocaleTimeString("es-CO", { hour12: false });
+}
+
+function fileName(path) {
+  return path ? path.split("/").pop() : "—";
+}
+
+// Número fijo de la instancia ("#3"), para cruzar el registro con la lista
+// aunque después se reordene la secuencia.
+function instanceNumber(instance) {
+  return instance.instanceId.replace("inst-", "#");
+}
+
+// Explicativo que se usaría para esta instancia con los ajustes actuales,
+// o null si están desactivados o no existe en este idioma.
+function explainerPathFor(instance) {
+  if (!explainersEnabled) return null;
+  const def = resolveExplainerDef(instance.taskId);
+  return def && def.explainerVideo ? def.explainerVideo : null;
+}
+
+function explainerPathsInSequence() {
+  return [...new Set(sequence.map(explainerPathFor).filter(Boolean))];
 }
 
 // Determina si, con esta configuración, en algún momento hay que "reciclar"
@@ -340,7 +388,7 @@ btnAddInstance.addEventListener("click", () => {
 
   sequence.push(instance);
   renderSequenceItem(instance);
-  syncSequenceState(instance.instanceId);
+  syncSequenceState();
 });
 
 // ================== CONSTRUCCIÓN DEL SCHEDULE ==================
@@ -445,7 +493,7 @@ function renderSequenceItem(instance) {
   li.className = "sequence-item";
   li.dataset.instanceId = instance.instanceId;
   li.innerHTML = `
-    <span class="task-title">${instance.label}</span>
+    <span class="task-title">${instance.label}<small class="preload-state"></small></span>
     <div class="move-buttons">
       <button class="btn-move btn-move-up" type="button" title="Subir">▲</button>
       <button class="btn-move btn-move-down" type="button" title="Bajar">▼</button>
@@ -487,13 +535,13 @@ function removeInstance(instanceId) {
   syncSequenceState();
 }
 
-function syncSequenceState(preferredInstanceId) {
+function syncSequenceState() {
   const orderedIds = [...sequenceList.querySelectorAll(".sequence-item")].map((li) => li.dataset.instanceId);
   sequence.sort((a, b) => orderedIds.indexOf(a.instanceId) - orderedIds.indexOf(b.instanceId));
 
   sequenceEmptyHint.hidden = sequence.length > 0;
-  btnDownloadReport.disabled = sequence.length === 0;
-  updateSequenceTotalLabel();
+  btnDownloadReport.disabled = sequence.length === 0 && sessionLog.length === 0;
+  onExplainerSettingsChanged();
   updateSequenceUI();
 
   if (sequence.length === 0) {
@@ -501,24 +549,16 @@ function syncSequenceState(preferredInstanceId) {
     return;
   }
 
-  if (isPlaying) {
-    // No interrumpir la reproducción en curso — pero sí refrescar todo lo
-    // que no requiere tocar el escenario: la etiqueta de posición y si
-    // ahora hay una tarea siguiente disponible (ej. si se acaba de agregar
-    // una mientras algo sonaba, "Siguiente" debe habilitarse al instante).
-    updateProgressLabelPosition();
-    updateNavButtonsState();
+  // Antes de empezar la sesión, el escenario muestra SIEMPRE la primera de
+  // la lista: al agregar, mover o quitar tareas se actualiza. Ya en curso se
+  // queda en la que va (igual que en Nueva sesión), salvo que la hayan quitado.
+  const currentStillThere = sequence.some((i) => i.instanceId === currentInstanceId);
+  if (!currentStillThere || (!sessionStarted && sequence[0].instanceId !== currentInstanceId)) {
+    loadInstance(sequence[0].instanceId);
     return;
   }
-
-  // En pausa (o sin nada reproduciéndose): normalmente el escenario refleja
-  // la primera tarea de la secuencia. La excepción es justo después de
-  // agregar una tarea nueva — ahí se prefiere mostrar la que se acaba de
-  // agregar (para que su explicativo aparezca), no la primera de la lista.
-  const targetId = preferredInstanceId && sequence.some((i) => i.instanceId === preferredInstanceId)
-    ? preferredInstanceId
-    : sequence[0].instanceId;
-  loadInstance(targetId);
+  updateProgressLabelPosition();
+  updateNavButtonsState();
 }
 
 // Único punto que deja el escenario completamente limpio (sin instancia
@@ -527,6 +567,8 @@ function syncSequenceState(preferredInstanceId) {
 // video de YouTube podía quedar sonando de fondo con la pantalla en negro.
 function resetStageToEmpty() {
   stageGeneration++; // invalida cualquier callback pendiente de una instancia anterior (ej. precarga en curso)
+  closeLogEntry(false);
+  sessionStarted = false;
   stopAnyPlayback();
   clearInterval(presenterSyncInterval);
   currentInstanceId = null;
@@ -538,7 +580,7 @@ function resetStageToEmpty() {
   explainerPlayer.hidden = true;
   customControls.hidden = false;
   progressBarFilled.style.width = "0%";
-  [btnPlayPause, btnPauseImagesNav, btnReset, btnSkipStep, btnExtendStep, btnFullscreen].forEach((b) => (b.disabled = true));
+  btnPauseImagesNav.disabled = true;
   btnPrevInstance.disabled = true;
   btnNextInstance.disabled = true;
   if (presenterChannel) presenterChannel.postMessage({ type: "show-blank" });
@@ -554,58 +596,257 @@ function updateSequenceTotalLabel() {
     sequenceTotalLabel.textContent = "";
     return;
   }
-  const totalSeconds = sequence.reduce((sum, inst) => sum + inst.schedule.totalTaskMs / 1000, 0);
-  sequenceTotalLabel.innerHTML = `Duración total estimada: <strong>${formatSeconds(totalSeconds)}</strong>`;
+  const imagesSec = sequence.reduce((sum, inst) => sum + inst.schedule.totalTaskMs / 1000, 0);
+  const explainerPaths = sequence.map(explainerPathFor).filter(Boolean);
+  if (explainerPaths.length === 0) {
+    sequenceTotalLabel.innerHTML = `Duración total estimada: <strong>${formatClock(imagesSec)}</strong>`;
+    return;
+  }
+  const durations = explainerPaths.map((src) => VideoDurations.get(src));
+  const explainersSec = durations.every((d) => d > 0) ? durations.reduce((a, b) => a + b, 0) : 0;
+  const total = explainersSec > 0 ? formatClock(imagesSec + explainersSec) : "…";
+  sequenceTotalLabel.innerHTML =
+    `Duración total estimada: <strong>${total}</strong> ` +
+    `<span class="hint">(imágenes ${formatClock(imagesSec)} + explicativos ${formatClock(explainersSec)})</span>`;
+}
+
+// ================== DESCARGA PREVIA DE LOS EXPLICATIVOS ==================
+// Igual que en Nueva sesión: los explicativos de TODA la secuencia se
+// descargan completos en segundo plano, en orden, para reproducirlos sin red.
+async function preloadSequenceExplainers() {
+  for (const src of explainerPathsInSequence()) {
+    await VideoCache.preload(src);
+  }
+}
+
+function explainerPreloadText(instance) {
+  const src = explainerPathFor(instance);
+  if (!src) return explainersEnabled ? "sin explicativo en este idioma" : "";
+  const st = VideoCache.getState(src);
+  if (!st) return "explicativo: en espera de descarga";
+  if (st.status === "ready") return "explicativo: ✓ listo sin conexión";
+  if (st.status === "error") return "explicativo: ⚠ no se pudo descargar, se usará internet";
+  return `explicativo: descargando… ${Math.round(st.progress * 100)}%`;
+}
+
+function refreshPreloadStatus() {
+  sequence.forEach((inst) => {
+    const small = sequenceList.querySelector(`.sequence-item[data-instance-id="${inst.instanceId}"] .preload-state`);
+    if (small) small.textContent = explainerPreloadText(inst);
+  });
+  const paths = explainerPathsInSequence();
+  if (paths.length === 0) {
+    preloadStatus.textContent = "";
+    return;
+  }
+  const ready = paths.filter((src) => VideoCache.getState(src)?.status === "ready").length;
+  preloadStatus.textContent = ready === paths.length
+    ? "✓ Todos los explicativos de la secuencia están descargados."
+    : `Descargando explicativos: ${ready}/${paths.length} listos.`;
+}
+
+VideoCache.onChange(refreshPreloadStatus);
+
+// ================== REGISTRO DE LO QUE REALMENTE SE REPRODUJO ==================
+// Cada vez que algo arranca (un explicativo o una secuencia de imágenes) se
+// abre una entrada con hora de inicio/fin, tiempo efectivo corriendo, pausas
+// y estado final. Cada pausa y reanudación se anota con la hora y el segundo
+// del paradigma en que ocurrió: si hubo pausas en las imágenes, los tiempos
+// reales ya no coinciden con el diseño (.fsf) y el reporte lo deja dicho.
+const sessionLog = [];
+let currentLogEntry = null;
+const sessionStartedAt = new Date();
+
+function paradigmElapsedMs() {
+  return isPlaying ? Date.now() - playStartTimestamp : elapsedAtPauseMs;
+}
+
+function openLogEntry(segment) {
+  const instance = getCurrentInstance();
+  if (!instance) return;
+  const now = Date.now();
+  currentLogEntry = {
+    instanceId: instance.instanceId,
+    number: instanceNumber(instance),
+    label: instance.label,
+    taskId: instance.taskId,
+    segment, // "explainer" | "images"
+    file: segment === "explainer" ? currentExplainerPath : null,
+    videoDurationS: segment === "explainer" && Number.isFinite(explainerPlayer.duration) ? explainerPlayer.duration : 0,
+    plannedMs: segment === "images" ? instance.schedule.totalTaskMs : 0,
+    language,
+    handedness,
+    startedAt: now,
+    endedAt: null,
+    runningSince: now,
+    playedMs: 0,
+    pauses: 0,
+    events: [], // { at, paradigmMs, text }
+    completed: false,
+    endNote: "",
+  };
+  sessionLog.push(currentLogEntry);
+  btnDownloadReport.disabled = false;
+}
+
+function logEvent(text) {
+  if (!currentLogEntry) return;
+  currentLogEntry.events.push({
+    at: Date.now(),
+    paradigmMs: currentLogEntry.segment === "images" ? paradigmElapsedMs() : explainerPlayer.currentTime * 1000,
+    text,
+  });
+}
+
+// Se llama cada vez que algo arranca o se reanuda.
+function logRunning(segment) {
+  sessionStarted = true;
+  const e = currentLogEntry;
+  if (!e || e.segment !== segment || e.instanceId !== currentInstanceId) {
+    closeLogEntry(false);
+    openLogEntry(segment);
+    return;
+  }
+  if (e.runningSince === null) {
+    e.runningSince = Date.now();
+    logEvent("▶ reanuda");
+  }
+}
+
+function logPaused() {
+  const e = currentLogEntry;
+  if (!e || e.runningSince === null) return;
+  e.playedMs += Date.now() - e.runningSince;
+  e.runningSince = null;
+  e.pauses++;
+  logEvent("⏸ pausa");
+}
+
+// completed = true cuando llegó a su final; endNote explica cómo terminó si no.
+function closeLogEntry(completed, endNote = "") {
+  const e = currentLogEntry;
+  if (!e) return;
+  const now = Date.now();
+  if (e.runningSince !== null) e.playedMs += now - e.runningSince;
+  e.runningSince = null;
+  e.endedAt = now;
+  e.completed = completed;
+  e.endNote = endNote;
+  if (e.segment === "images") e.finalParadigmMs = paradigmElapsedMs();
+  currentLogEntry = null;
 }
 
 // ================== REPORTE DE LA SESIÓN ==================
-// Genera un .txt con lo que REALMENTE se programó para cada instancia
-// (instance.schedule), no con los datos de catálogo — así el reporte
-// refleja fielmente qué imagen sonó en qué orden, incluso si hubo
-// aleatorización o préstamo de imágenes entre bloques.
+// Tres partes: (1) lo programado, (2) lo que realmente pasó, con horas e
+// intervenciones manuales, y (3) el detalle de imágenes y vectores 0/1 de
+// cada instancia, tomado del schedule real (incluye aleatorización y
+// préstamo de imágenes entre bloques).
+const LANG_LABEL = { es: "Español", en: "English" };
+const HAND_LABEL = { diestro: "Diestro", zurdo: "Zurdo" };
+const SEGMENT_LABEL = { explainer: "Video explicativo", images: "Secuencia de imágenes" };
+
+function snapshotEntry(e) {
+  const now = Date.now();
+  const playedMs = e.playedMs + (e.runningSince !== null ? now - e.runningSince : 0);
+  return { ...e, playedMs, wallMs: (e.endedAt || now) - e.startedAt, open: e.endedAt === null };
+}
+
+function entryStatus(s) {
+  if (s.open) return "en curso al generar el reporte";
+  if (s.completed) return "completa";
+  return s.endNote ? `interrumpida (${s.endNote})` : "interrumpida";
+}
+
 function buildSessionReport() {
   const lines = [];
   const now = new Date();
-  const totalSeconds = sequence.reduce((sum, inst) => sum + inst.schedule.totalTaskMs / 1000, 0);
+  const entries = sessionLog.map(snapshotEntry);
+  const sep = "=".repeat(70);
 
-  lines.push("REPORTE DE SESIÓN — FMRI Task Visualizer (Investigación)");
+  lines.push("REPORTE DE SESIÓN — FMRI Assistant (Investigación)");
   lines.push(`Generado: ${now.toLocaleString("es-CO")}`);
-  lines.push(`Duración total de la sesión: ${formatSeconds(totalSeconds)}`);
+  lines.push(`Página abierta desde: ${sessionStartedAt.toLocaleString("es-CO")}`);
   lines.push("");
-  lines.push(`Videos explicativos: ${explainersEnabled ? "activados" : "desactivados"}`);
-  lines.push(`Idioma: ${language === "en" ? "English" : "Español"}`);
-  lines.push(`Lateralidad: ${handedness === "zurdo" ? "Zurdo" : "Diestro"}`);
+  lines.push("Configuración al momento del reporte:");
+  lines.push(`  Videos explicativos: ${explainersEnabled ? "activados" : "desactivados"}`);
+  lines.push(`  Idioma: ${LANG_LABEL[language]}`);
+  lines.push(`  Lateralidad: ${HAND_LABEL[handedness]} (solo cambia el explicativo de MENV)`);
   lines.push("");
-  lines.push("Orden de tareas:");
-  sequence.forEach((inst, i) => lines.push(`  ${i + 1}. ${inst.label}`));
-  lines.push("");
-  lines.push("=".repeat(70));
 
+  // ---- 1. Programado ----
+  lines.push(sep);
+  lines.push("1. SECUENCIA PROGRAMADA (orden actual en la lista)");
+  lines.push(sep);
+  if (sequence.length === 0) lines.push("  (vacía)");
+  sequence.forEach((inst, i) => {
+    const src = explainerPathFor(inst);
+    let explainerText = "sin explicativo";
+    if (explainersEnabled) explainerText = src ? `explicativo ${formatClock(VideoDurations.get(src))}` : "explicativo no disponible en este idioma";
+    lines.push(`  ${i + 1}. [${instanceNumber(inst)}] ${inst.label} — imágenes ${formatClock(inst.schedule.totalTaskMs / 1000)} | ${explainerText}`);
+  });
+  if (sequence.length > 0) lines.push(`  ${sequenceTotalLabel.textContent}`);
+  lines.push("");
+
+  // ---- 2. Lo que pasó ----
+  lines.push(sep);
+  lines.push("2. REGISTRO DE REPRODUCCIÓN (en el orden en que ocurrió)");
+  lines.push(sep);
+  lines.push("Corriendo = tiempo efectivo en marcha (sin pausas). Total = de inicio a fin, con pausas.");
+  lines.push("t = segundo del paradigma (o del video) en que ocurrió cada evento.");
+  lines.push("");
+  if (entries.length === 0) lines.push("  (no se reprodujo nada)");
+  entries.forEach((s, i) => {
+    const end = s.open ? "…" : timeOfDay(s.endedAt);
+    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.number} ${s.label} — ${SEGMENT_LABEL[s.segment]}`);
+    if (s.segment === "explainer") {
+      lines.push(`   Idioma: ${LANG_LABEL[s.language]} | Lateralidad: ${HAND_LABEL[s.handedness]} | Archivo: ${fileName(s.file)}`);
+      lines.push(`   Duración del video: ${formatClock(s.videoDurationS)} | Corriendo: ${formatClock(s.playedMs / 1000)} | Total: ${formatClock(s.wallMs / 1000)} | Pausas: ${s.pauses}`);
+    } else {
+      lines.push(`   Programado: ${formatSeconds(s.plannedMs / 1000)} | Corriendo: ${formatSeconds(s.playedMs / 1000)} | Total con pausas: ${formatSeconds(s.wallMs / 1000)} | Pausas: ${s.pauses}`);
+    }
+    lines.push(`   Estado: ${entryStatus(s)}`);
+    if (s.events.length > 0) {
+      lines.push("   Eventos:");
+      s.events.forEach((ev) => lines.push(`     ${timeOfDay(ev.at)} (t=${formatSeconds(ev.paradigmMs / 1000)}) ${ev.text}`));
+    }
+    if (s.segment === "images") {
+      lines.push(
+        s.pauses > 0
+          ? "   ⚠ Hubo pausas: los tiempos reales NO coinciden con el diseño programado."
+          : "   Sin pausas: los tiempos coinciden con el diseño programado."
+      );
+    }
+    lines.push("");
+  });
+
+  // ---- 3. Detalle de imágenes ----
+  lines.push(sep);
+  lines.push("3. DETALLE DE IMÁGENES POR INSTANCIA");
+  lines.push(sep);
   sequence.forEach((inst, i) => {
     const task = allTasks.find((t) => t.id === inst.taskId);
     const numCycles = inst.numBlocks / 2;
 
     lines.push("");
-    lines.push(`INSTANCIA ${i + 1}: ${task ? task.title : inst.taskId} (${inst.taskId})`);
+    lines.push(`INSTANCIA ${i + 1} [${instanceNumber(inst)}]: ${task ? task.title : inst.taskId} (${inst.taskId})`);
     lines.push(
       `Bloques: ${inst.numBlocks} (${numCycles} ciclos) | Duración por bloque: ${inst.blockDuration}s | ` +
       `Estímulos por bloque: ${inst.stimuliPerBlock} | Modo: ${inst.repeatMode}` +
       (inst.schedule.repeated ? " (se usó repetición/préstamo entre bloques)" : "")
     );
     lines.push(`Tiempo por estímulo: ${formatSeconds(inst.blockDuration / inst.stimuliPerBlock)}`);
-    lines.push(`Duración total de esta tarea: ${formatSeconds(inst.schedule.totalTaskMs / 1000)}`);
+    lines.push(`Duración programada de esta tarea: ${formatSeconds(inst.schedule.totalTaskMs / 1000)}`);
 
     ["reposo", "activación"].forEach((tipo) => {
-      const stepsOfType = inst.schedule.steps.filter((s) => s.type === tipo);
+      const stepsOfType = inst.schedule.steps.filter((st) => st.type === tipo);
       lines.push("");
       lines.push(`--- ${tipo.toUpperCase()} ---`);
       lines.push("Imágenes por bloque, en el orden en que se muestran:");
       const vectorByBlock = [];
       for (let c = 1; c <= numCycles; c++) {
-        const stepsOfCycle = stepsOfType.filter((s) => s.cycle === c);
-        const names = stepsOfCycle.map((s) => s.src.split("/").pop());
-        lines.push(`  Bloque ${c}: ${names.join(", ")}`);
-        vectorByBlock.push(stepsOfCycle.map((s) => (s.label === null || s.label === undefined ? "-" : s.label)).join(""));
+        const stepsOfCycle = stepsOfType.filter((st) => st.cycle === c);
+        lines.push(`  Bloque ${c}: ${stepsOfCycle.map((st) => fileName(st.src)).join(", ")}`);
+        vectorByBlock.push(stepsOfCycle.map((st) => (st.label === null || st.label === undefined ? "-" : st.label)).join(""));
       }
       lines.push("");
       lines.push('Vector (0=negativo, 1=positivo, "-"=sin clasificar):');
@@ -620,10 +861,11 @@ function buildSessionReport() {
 }
 
 btnDownloadReport.addEventListener("click", () => {
-  const content = buildSessionReport();
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([buildSessionReport()], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`; // hora local
 
   const a = document.createElement("a");
   a.href = url;
@@ -632,6 +874,7 @@ btnDownloadReport.addEventListener("click", () => {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  btnDownloadReport.blur();
 });
 
 function isInstanceCurrentlyPlaying(instanceId) {
@@ -665,6 +908,7 @@ function showImageStage() {
 // ================== CARGA Y REPRODUCCIÓN DE UNA INSTANCIA ==================
 function loadInstance(instanceId) {
   const myGeneration = ++stageGeneration;
+  closeLogEntry(false, "se cambió de tarea o se recargó");
   currentInstanceId = instanceId;
   restScreen.hidden = true;
   btnStartTask.hidden = true;
@@ -679,9 +923,8 @@ function loadInstance(instanceId) {
   updateNavButtonsState();
   updateSequenceUI();
 
-  btnFullscreen.disabled = false; // no depende de la precarga de imágenes
   imagesPreloaded = false;
-  [btnPlayPause, btnPauseImagesNav, btnReset, btnSkipStep, btnExtendStep].forEach((b) => (b.disabled = true));
+  btnPauseImagesNav.disabled = true;
 
   // Las imágenes se precargan en paralelo al explicativo (si lo hay), para
   // que al terminar el video la secuencia arranque sin espera. Si para
@@ -695,7 +938,7 @@ function loadInstance(instanceId) {
     // Si está en la pantalla negra previa a la tarea, no se muestra nada
     // todavía: la primera imagen aparece al pulsar "Continuar a la tarea".
     if (currentSegment === "images" && restScreen.hidden) {
-      [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
+      btnPauseImagesNav.disabled = false;
       loadVisualForStep(instance, 0);
     }
   });
@@ -703,6 +946,7 @@ function loadInstance(instanceId) {
   if (startWithExplainer) {
     showExplainerStage();
     setExplainerVideo(explainerDef.explainerVideo);
+    btnPauseImagesNav.disabled = false; // ▶/⏸ también controla el explicativo
     if (presenterChannel) presenterChannel.postMessage({ type: "show-explainer", src: explainerDef.explainerVideo });
   } else {
     showImageStage();
@@ -815,6 +1059,8 @@ explainerPlayer.addEventListener("error", () => {
 explainerPlayer.addEventListener("play", () => {
   if (currentSegment !== "explainer") return;
   isPlaying = true;
+  setPlayPauseIcon("⏸");
+  logRunning("explainer");
   updateSequenceUI();
   if (presenterChannel) {
     presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime });
@@ -831,6 +1077,8 @@ explainerPlayer.addEventListener("play", () => {
 explainerPlayer.addEventListener("pause", () => {
   if (currentSegment !== "explainer" || explainerPlayer.ended) return; // el final lo maneja "ended"
   isPlaying = false;
+  setPlayPauseIcon("▶");
+  logPaused();
   updateSequenceUI();
   clearInterval(presenterSyncInterval);
   if (presenterChannel) {
@@ -847,6 +1095,7 @@ explainerPlayer.addEventListener("seeked", () => {
 
 explainerPlayer.addEventListener("ended", () => {
   if (currentSegment !== "explainer") return;
+  closeLogEntry(true);
   clearInterval(presenterSyncInterval);
   finishExplainer();
 });
@@ -859,6 +1108,8 @@ function finishExplainer() {
   if (!instance) return;
   currentSegment = "images";
   isPlaying = false;
+  setPlayPauseIcon("▶");
+  btnPauseImagesNav.disabled = true; // se habilita al continuar
   updateNowPlayingLabel();
   updateSequenceUI();
 
@@ -879,21 +1130,42 @@ btnStartTask.addEventListener("click", () => {
   // Si las imágenes aún cargan, el aviso de precarga se encarga de mostrar
   // la primera y habilitar ▶ en cuanto terminen.
   if (imagesPreloaded) {
-    [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
+    btnPauseImagesNav.disabled = false;
     loadVisualForStep(instance, 0);
   }
 });
 
 
 // ================== CONTROLES DE REPRODUCCIÓN ==================
-btnPlayPause.addEventListener("click", () => {
-  if (currentSegment !== "images" || !imagesPreloaded || !restScreen.hidden) return;
+// ▶/⏸ (y la barra espaciadora): controla lo que esté en pantalla, sea el
+// video explicativo o la secuencia de imágenes. En las pantallas negras no hace nada.
+function togglePlayback() {
+  if (!currentInstanceId || !restScreen.hidden) return;
+  if (currentSegment === "explainer") {
+    if (explainerPlayer.paused) explainerPlayer.play().catch((err) => console.error("No se pudo reproducir:", err));
+    else explainerPlayer.pause();
+    return;
+  }
+  if (!imagesPreloaded) return;
   isPlaying ? pausePlayback() : startPlayback();
+}
+
+btnPauseImagesNav.addEventListener("click", () => {
+  togglePlayback();
+  btnPauseImagesNav.blur(); // evita que la barra espaciadora "haga clic" sobre el botón y alterne dos veces
 });
-btnPauseImagesNav.addEventListener("click", () => btnPlayPause.click());
+
+document.addEventListener("keydown", (event) => {
+  if (event.code !== "Space") return;
+  // Si el foco está en el reproductor, el navegador ya pausa/reproduce solo.
+  if (document.activeElement === explainerPlayer) return;
+  const tag = document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  event.preventDefault();
+  togglePlayback();
+});
 
 function setPlayPauseIcon(icon) {
-  btnPlayPause.textContent = icon;
   btnPauseImagesNav.textContent = icon;
 }
 
@@ -902,11 +1174,10 @@ function startPlayback() {
   if (!instance || instance.schedule.steps.length === 0) return;
   isPlaying = true;
   setPlayPauseIcon("⏸");
-  btnSkipStep.disabled = false;
-  btnExtendStep.disabled = false;
 
   playStartTimestamp = Date.now() - elapsedAtPauseMs;
   sequenceTicker.start();
+  logRunning("images");
   updateSequenceUI();
 }
 
@@ -915,8 +1186,7 @@ function pausePlayback() {
   setPlayPauseIcon("▶");
   sequenceTicker.stop();
   elapsedAtPauseMs = Date.now() - playStartTimestamp;
-  btnSkipStep.disabled = true;
-  btnExtendStep.disabled = true;
+  logPaused();
   updateSequenceUI();
 }
 
@@ -925,8 +1195,6 @@ function stopPlayback() {
   setPlayPauseIcon("▶");
   sequenceTicker.stop();
   elapsedAtPauseMs = 0;
-  btnSkipStep.disabled = true;
-  btnExtendStep.disabled = true;
 }
 
 // Detiene cualquier mecanismo de reproducción activo (el tick de imágenes o
@@ -936,43 +1204,6 @@ function stopAnyPlayback() {
   stopPlayback();
   explainerPlayer.pause();
 }
-
-btnReset.addEventListener("click", () => {
-  stopPlayback();
-  const instance = getCurrentInstance();
-  if (instance) loadVisualForStep(instance, 0);
-});
-
-btnFullscreen.addEventListener("click", () => {
-  document.fullscreenElement ? document.exitFullscreen() : stageContainer.requestFullscreen();
-});
-
-// ================== CONTROLES MANUALES EN VIVO ==================
-btnSkipStep.addEventListener("click", () => {
-  if (!isPlaying) return;
-  const instance = getCurrentInstance();
-  const nextIndex = currentStepIndex + 1;
-
-  if (nextIndex >= instance.schedule.steps.length) {
-    finishCurrentInstance();
-    return;
-  }
-  const targetElapsed = instance.schedule.cumulativeStarts[nextIndex];
-  playStartTimestamp = Date.now() - targetElapsed;
-});
-
-btnExtendStep.addEventListener("click", () => {
-  if (!isPlaying || currentStepIndex < 0) return;
-  const instance = getCurrentInstance();
-  const extraSeconds = 5;
-  const extraMs = extraSeconds * 1000;
-
-  instance.schedule.steps[currentStepIndex].duration += extraSeconds;
-  for (let i = currentStepIndex + 1; i < instance.schedule.cumulativeStarts.length; i++) {
-    instance.schedule.cumulativeStarts[i] += extraMs;
-  }
-  instance.schedule.totalTaskMs += extraMs;
-});
 
 function tick() {
   const instance = getCurrentInstance();
@@ -1005,7 +1236,9 @@ function updateProgressBar(instance, elapsed) {
 }
 
 function finishCurrentInstance() {
+  closeLogEntry(true);
   stopPlayback();
+  btnPauseImagesNav.disabled = true;
   const index = sequence.findIndex((i) => i.instanceId === currentInstanceId);
   const isLast = index === -1 || index >= sequence.length - 1;
   btnContinueNext.hidden = isLast;

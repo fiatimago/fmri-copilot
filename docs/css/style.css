@@ -508,8 +508,6 @@ body {
   height: 5px;
   background-color: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
-  margin-bottom: 0.6rem;
-  cursor: pointer;
 }
 
 .progress-bar-filled {
@@ -518,33 +516,6 @@ body {
   background-color: var(--color-danger);
   border-radius: 999px;
   pointer-events: none;
-}
-
-.controls-buttons {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.control-btn {
-  padding: 0.45rem 0.9rem;
-  font-size: 1rem;
-  border: none;
-  border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.15);
-  color: white;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.control-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.control-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* ---- Estilo base para inputs numéricos/texto del constructor ---- */
