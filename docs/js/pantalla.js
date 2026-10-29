@@ -7,6 +7,10 @@
 // El canal depende de qué página la abrió:
 //   pantalla.html               → Investigación (investigacion.js)
 //   pantalla.html?canal=sesion  → Nueva sesión (session.js)
+//
+// Los videos se toman de la copia que la ventana de control ya descargó al
+// caché del navegador (VideoCache); esta ventana no descarga nada por su cuenta.
+// El video va silenciado: el audio sale de la ventana de control.
 
 const CHANNELS = {
   investigacion: "fmri-investigacion-presenter",
@@ -16,73 +20,82 @@ const canal = new URLSearchParams(window.location.search).get("canal");
 const presenterChannel = new BroadcastChannel(CHANNELS[canal] || CHANNELS.investigacion);
 
 // Solo se salta a la posición de la ventana de control si el desfase supera
-// este umbral. Antes se hacía seekTo cada 3s sin condición, y cada salto
-// obligaba a YouTube a volver a cargar → el video se veía "cortado".
+// este umbral; saltar siempre haría que el video se viera "cortado".
 const SEEK_DRIFT_THRESHOLD_S = 0.5;
 
 const stageImage = document.getElementById("stage-image");
-const youtubeStage = document.getElementById("youtube-player-proj-wrapper"); // el envoltorio, NO el div que la API de YouTube reemplaza
+const stageVideo = document.getElementById("stage-video");
 
-let ytPlayer;
-let isYtPlayerReady = false;
-let pendingVideoId = null; // por si "show-video" llega antes de que el reproductor esté listo
+// Buscar la copia en caché es asíncrono, así que los mensajes de play/pause/
+// posición que lleguen mientras tanto se guardan y se aplican al cargar.
+let loadToken = 0; // invalida cargas viejas si llega otro video antes de terminar
+let videoReady = false;
+let wantPlaying = false;
+let pendingSeek = null;
 
-function onYouTubeIframeAPIReady() {
-  ytPlayer = new YT.Player("youtube-player-proj", {
-    height: "100%",
-    width: "100%",
-    playerVars: {
-      controls: 0, // el paciente nunca ve controles de YouTube
-      disablekb: 1,
-      rel: 0,
-      modestbranding: 1,
-      iv_load_policy: 3,
-      cc_load_policy: 0,
-    },
-    events: { onReady: onYtPlayerReady },
-  });
+async function showVideo(src) {
+  const myToken = ++loadToken;
+  videoReady = false;
+  wantPlaying = false;
+  pendingSeek = null;
+  stageImage.hidden = true;
+  stageVideo.hidden = false;
+
+  const url = await VideoCache.playableUrlFromCache(src);
+  if (myToken !== loadToken) return;
+  stageVideo.src = url;
+  stageVideo.load();
 }
 
-function onYtPlayerReady() {
-  isYtPlayerReady = true;
-  // Silenciado: el audio sale de la ventana de control (mismo computador).
-  // Si sonaran los dos reproductores habría eco por el pequeño desfase, y
-  // además el navegador puede bloquear la reproducción automática con sonido
-  // en esta ventana porque aquí nadie hace clic.
-  ytPlayer.mute();
-  if (pendingVideoId) {
-    ytPlayer.cueVideoById(pendingVideoId);
-    pendingVideoId = null;
+stageVideo.addEventListener("loadedmetadata", () => {
+  videoReady = true;
+  if (pendingSeek !== null) stageVideo.currentTime = pendingSeek;
+  pendingSeek = null;
+  if (wantPlaying) stageVideo.play().catch(() => {});
+});
+
+function playVideo() {
+  wantPlaying = true;
+  if (videoReady) stageVideo.play().catch(() => {});
+}
+
+function pauseVideo() {
+  wantPlaying = false;
+  if (videoReady) stageVideo.pause();
+}
+
+// force = true en pausas, saltos manuales y al (re)abrir la ventana, para
+// quedar en el cuadro exacto; en la sincronización periódica solo se salta
+// si hay desfase real.
+function syncTo(seconds, force) {
+  if (!videoReady) {
+    pendingSeek = seconds;
+    return;
   }
+  const drift = Math.abs(stageVideo.currentTime - seconds);
+  if (force || drift > SEEK_DRIFT_THRESHOLD_S) stageVideo.currentTime = seconds;
+}
+
+function stopVideo() {
+  loadToken++;
+  videoReady = false;
+  wantPlaying = false;
+  stageVideo.pause();
+  stageVideo.hidden = true;
 }
 
 function showImage(src) {
-  if (isYtPlayerReady) ytPlayer.pauseVideo();
-  youtubeStage.hidden = true;
+  stopVideo();
   stageImage.hidden = false;
   stageImage.src = src;
 }
 
-function showVideo(videoId) {
-  stageImage.hidden = true;
-  youtubeStage.hidden = false;
-  if (isYtPlayerReady) ytPlayer.cueVideoById(videoId);
-  else pendingVideoId = videoId;
-}
-
 function showBlank() {
+  stopVideo();
+  stageVideo.removeAttribute("src");
+  stageVideo.load();
   stageImage.hidden = true;
   stageImage.src = "";
-  youtubeStage.hidden = true;
-  if (isYtPlayerReady) ytPlayer.stopVideo();
-}
-
-// force = true en pausas y al (re)abrir la ventana, para quedar en el cuadro
-// exacto; en la sincronización periódica solo se salta si hay desfase real.
-function syncTo(seconds, force) {
-  if (!isYtPlayerReady) return;
-  const drift = Math.abs(ytPlayer.getCurrentTime() - seconds);
-  if (force || drift > SEEK_DRIFT_THRESHOLD_S) ytPlayer.seekTo(seconds, true);
 }
 
 presenterChannel.addEventListener("message", (event) => {
@@ -95,15 +108,15 @@ presenterChannel.addEventListener("message", (event) => {
     // "*-explainer" lo usa Investigación; "*-video" lo usa Nueva sesión.
     case "show-explainer":
     case "show-video":
-      showVideo(msg.videoId);
+      showVideo(msg.src);
       break;
     case "play-explainer":
     case "play-video":
-      if (isYtPlayerReady) ytPlayer.playVideo();
+      playVideo();
       break;
     case "pause-explainer":
     case "pause-video":
-      if (isYtPlayerReady) ytPlayer.pauseVideo();
+      pauseVideo();
       break;
     case "seek-explainer":
     case "seek-video":

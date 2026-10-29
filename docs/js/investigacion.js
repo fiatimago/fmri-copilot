@@ -48,11 +48,9 @@ function broadcastCurrentState() {
       presenterChannel.postMessage({ type: "show-blank" });
       return;
     }
-    presenterChannel.postMessage({ type: "show-explainer", videoId: def.explainerYoutubeId });
-    if (isYtPlayerReady) {
-      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime(), force: true });
-      presenterChannel.postMessage({ type: isPlaying ? "play-explainer" : "pause-explainer" });
-    }
+    presenterChannel.postMessage({ type: "show-explainer", src: def.explainerVideo });
+    presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime, force: true });
+    presenterChannel.postMessage({ type: isPlaying ? "play-explainer" : "pause-explainer" });
     return;
   }
 
@@ -111,9 +109,6 @@ let explainersEnabled = true;
 let language = "es";
 let handedness = "diestro";
 let currentSegment = "images"; // "explainer" | "images" — qué se está mostrando en el escenario
-let ytPlayer;
-let isYtPlayerReady = false;
-let pendingAutoStartAfterPreload = false; // se pulsó "Iniciar tarea" antes de que las imágenes terminaran de cargar
 let presenterSyncInterval = null; // reenvía la posición del explicativo a la pantalla del paciente cada 3s
 
 // ================== DOM ==================
@@ -140,7 +135,7 @@ const progressLabel = document.getElementById("progress-label-inv");
 
 const stageContainer = document.getElementById("stage-container");
 const stageImage = document.getElementById("stage-image");
-const youtubeStage = document.getElementById("youtube-player-inv-wrapper"); // el envoltorio, NO el div que la API de YouTube reemplaza
+const explainerPlayer = document.getElementById("video-player-inv"); // reproductor de los videos explicativos
 const customControls = document.getElementById("custom-controls");
 const restScreen = document.getElementById("rest-screen-inv");
 const btnContinueNext = document.getElementById("btn-continue-next-inv");
@@ -191,7 +186,7 @@ function resolveExplainerDef(taskId) {
   if (!task) return null;
   const base = task.variants ? (task.variants[handedness] || task.variants.diestro) : task;
   const langData = base[language] || base.es;
-  return { explainerYoutubeId: langData.explainerYoutubeId, explainerDuration: langData.explainerDuration };
+  return { explainerVideo: langData.explainerVideo || null }; // null si no existe en ese idioma (hoy: inglés)
 }
 
 // ================== AJUSTES: EXPLICATIVOS / IDIOMA / LATERALIDAD ==================
@@ -540,7 +535,7 @@ function resetStageToEmpty() {
   restScreen.hidden = true;
   stageImage.hidden = true;
   stageImage.src = "";
-  youtubeStage.hidden = true;
+  explainerPlayer.hidden = true;
   customControls.hidden = false;
   progressBarFilled.style.width = "0%";
   [btnPlayPause, btnPauseImagesNav, btnReset, btnSkipStep, btnExtendStep, btnFullscreen].forEach((b) => (b.disabled = true));
@@ -656,13 +651,13 @@ function updateSequenceUI() {
 
 // ================== ESCENARIO: EXPLICATIVO vs IMÁGENES ==================
 function showExplainerStage() {
-  youtubeStage.hidden = false;
+  explainerPlayer.hidden = false;
   stageImage.hidden = true;
   customControls.hidden = true;
 }
 
 function showImageStage() {
-  youtubeStage.hidden = true;
+  explainerPlayer.hidden = true;
   stageImage.hidden = false;
   customControls.hidden = false;
 }
@@ -677,7 +672,7 @@ function loadInstance(instanceId) {
 
   const instance = sequence.find((i) => i.instanceId === instanceId);
   const explainerDef = resolveExplainerDef(instance.taskId);
-  const startWithExplainer = explainersEnabled && !!(explainerDef && explainerDef.explainerYoutubeId);
+  const startWithExplainer = explainersEnabled && !!(explainerDef && explainerDef.explainerVideo);
   currentSegment = startWithExplainer ? "explainer" : "images";
 
   updateNowPlayingLabel();
@@ -686,7 +681,6 @@ function loadInstance(instanceId) {
 
   btnFullscreen.disabled = false; // no depende de la precarga de imágenes
   imagesPreloaded = false;
-  pendingAutoStartAfterPreload = false;
   [btnPlayPause, btnPauseImagesNav, btnReset, btnSkipStep, btnExtendStep].forEach((b) => (b.disabled = true));
 
   // Las imágenes se precargan en paralelo al explicativo (si lo hay), para
@@ -699,22 +693,17 @@ function loadInstance(instanceId) {
     if (!hasMissing) updateNowPlayingLabel(); // restaura "(1/3)" si el aviso de precarga lo tapó
 
     // Si está en la pantalla negra previa a la tarea, no se muestra nada
-    // todavía: la primera imagen aparece al pulsar "Iniciar tarea".
+    // todavía: la primera imagen aparece al pulsar "Continuar a la tarea".
     if (currentSegment === "images" && restScreen.hidden) {
       [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
       loadVisualForStep(instance, 0);
-    }
-    if (pendingAutoStartAfterPreload) {
-      pendingAutoStartAfterPreload = false;
-      loadVisualForStep(instance, 0);
-      startPlayback();
     }
   });
 
   if (startWithExplainer) {
     showExplainerStage();
-    if (isYtPlayerReady) ytPlayer.cueVideoById(explainerDef.explainerYoutubeId);
-    if (presenterChannel) presenterChannel.postMessage({ type: "show-explainer", videoId: explainerDef.explainerYoutubeId });
+    setExplainerVideo(explainerDef.explainerVideo);
+    if (presenterChannel) presenterChannel.postMessage({ type: "show-explainer", src: explainerDef.explainerVideo });
   } else {
     showImageStage();
   }
@@ -793,69 +782,78 @@ btnNextInstance.addEventListener("click", () => {
   if (index !== -1 && index < sequence.length - 1) loadInstance(sequence[index + 1].instanceId);
 });
 
-// ================== REPRODUCTOR DE YOUTUBE (solo para explicativos) ==================
-function onYouTubeIframeAPIReady() {
-  ytPlayer = new YT.Player("youtube-player-inv", {
-    height: "100%",
-    width: "100%",
-    playerVars: {
-      controls: 1,
-      rel: 0,
-      modestbranding: 1,
-      iv_load_policy: 3,
-      cc_load_policy: 0,
-    },
-    events: { onReady: onYtPlayerReady, onStateChange: onYtPlayerStateChange, onError: onYtPlayerError },
-  });
+// ================== REPRODUCTOR DE LOS VIDEOS EXPLICATIVOS ==================
+// Mismo esquema que Nueva sesión: el archivo se descarga completo al
+// navegador (VideoCache) y se reproduce desde la copia local.
+let currentExplainerPath = null;
+
+function setExplainerVideo(path) {
+  currentExplainerPath = path;
+  VideoCache.preload(path);
+  explainerPlayer.src = VideoCache.playableUrl(path);
+  explainerPlayer.load();
 }
 
-function onYtPlayerReady() {
-  isYtPlayerReady = true;
-  if (currentSegment === "explainer") {
-    const instance = getCurrentInstance();
-    const def = instance && resolveExplainerDef(instance.taskId);
-    if (def) ytPlayer.cueVideoById(def.explainerYoutubeId);
+// Si el explicativo cargado (y aún sin empezar) termina de descargarse,
+// se cambia a la copia local para que ya no dependa de la red.
+VideoCache.onChange((src, state) => {
+  if (src !== currentExplainerPath || state.status !== "ready") return;
+  if (currentSegment !== "explainer" || !explainerPlayer.paused || explainerPlayer.currentTime !== 0) return;
+  const local = VideoCache.playableUrl(src);
+  if (explainerPlayer.src !== local) {
+    explainerPlayer.src = local;
+    explainerPlayer.load();
   }
-}
+});
 
-function onYtPlayerError(event) {
-  console.error("YouTube error (explicativo), code:", event.data);
-  currentInstanceName.textContent = "⚠ Error al cargar el video explicativo (código " + event.data + ")";
-}
+explainerPlayer.addEventListener("error", () => {
+  if (currentSegment !== "explainer") return;
+  console.error("Error del reproductor (explicativo):", currentExplainerPath, explainerPlayer.error);
+  currentInstanceName.textContent = "⚠ No se pudo reproducir el video explicativo";
+});
 
-function onYtPlayerStateChange(event) {
-  if (event.data === YT.PlayerState.PLAYING) {
-    isPlaying = true;
-    updateSequenceUI();
-    if (presenterChannel) {
-      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime() });
-      presenterChannel.postMessage({ type: "play-explainer" });
-      // Reenvía la posición cada 3s mientras suena, para corregir cualquier
-      // pequeño desajuste entre los dos reproductores (cada ventana tiene
-      // el suyo — nunca quedan perfectamente cuadro a cuadro, pero así no
-      // se acumula diferencia a lo largo del video).
-      clearInterval(presenterSyncInterval);
-      presenterSyncInterval = setInterval(() => {
-        presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime() });
-      }, 3000);
-    }
-  } else if (event.data === YT.PlayerState.PAUSED) {
-    isPlaying = false;
-    updateSequenceUI();
+explainerPlayer.addEventListener("play", () => {
+  if (currentSegment !== "explainer") return;
+  isPlaying = true;
+  updateSequenceUI();
+  if (presenterChannel) {
+    presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime });
+    presenterChannel.postMessage({ type: "play-explainer" });
+    // Reenvía la posición cada 3s mientras suena; la pantalla del paciente
+    // solo salta si el desfase supera su umbral.
     clearInterval(presenterSyncInterval);
-    if (presenterChannel) {
-      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime(), force: true });
-      presenterChannel.postMessage({ type: "pause-explainer" });
-    }
-  } else if (event.data === YT.PlayerState.ENDED) {
-    clearInterval(presenterSyncInterval);
-    finishExplainer();
+    presenterSyncInterval = setInterval(() => {
+      presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime });
+    }, 3000);
   }
-}
+});
+
+explainerPlayer.addEventListener("pause", () => {
+  if (currentSegment !== "explainer" || explainerPlayer.ended) return; // el final lo maneja "ended"
+  isPlaying = false;
+  updateSequenceUI();
+  clearInterval(presenterSyncInterval);
+  if (presenterChannel) {
+    presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime, force: true });
+    presenterChannel.postMessage({ type: "pause-explainer" });
+  }
+});
+
+explainerPlayer.addEventListener("seeked", () => {
+  if (currentSegment === "explainer" && presenterChannel) {
+    presenterChannel.postMessage({ type: "seek-explainer", seconds: explainerPlayer.currentTime, force: true });
+  }
+});
+
+explainerPlayer.addEventListener("ended", () => {
+  if (currentSegment !== "explainer") return;
+  clearInterval(presenterSyncInterval);
+  finishExplainer();
+});
 
 // El explicativo terminó: se muestra una pantalla negra (también en la
-// pantalla del paciente) y la secuencia de imágenes NO arranca sola. El
-// técnico la inicia con "Iniciar tarea" cuando el paciente esté listo.
+// pantalla del paciente). "Continuar a la tarea" la quita y deja la primera
+// imagen EN PAUSA; la secuencia arranca solo con ▶.
 function finishExplainer() {
   const instance = getCurrentInstance();
   if (!instance) return;
@@ -878,13 +876,11 @@ btnStartTask.addEventListener("click", () => {
   showImageStage();
   btnStartTask.blur();
 
+  // Si las imágenes aún cargan, el aviso de precarga se encarga de mostrar
+  // la primera y habilitar ▶ en cuanto terminen.
   if (imagesPreloaded) {
     [btnPlayPause, btnPauseImagesNav, btnReset].forEach((b) => (b.disabled = false));
     loadVisualForStep(instance, 0);
-    startPlayback();
-  } else {
-    // Las imágenes aún cargan: arranca sola en cuanto termine la precarga.
-    pendingAutoStartAfterPreload = true;
   }
 });
 
@@ -934,11 +930,11 @@ function stopPlayback() {
 }
 
 // Detiene cualquier mecanismo de reproducción activo (el tick de imágenes o
-// el video de YouTube), sin importar en qué segmento esté la instancia que
+// el video explicativo), sin importar en qué segmento esté la instancia que
 // se está dejando atrás. Se llama siempre al cambiar de instancia.
 function stopAnyPlayback() {
   stopPlayback();
-  if (isYtPlayerReady) ytPlayer.stopVideo();
+  explainerPlayer.pause();
 }
 
 btnReset.addEventListener("click", () => {

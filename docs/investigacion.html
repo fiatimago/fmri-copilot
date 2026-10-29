@@ -34,14 +34,12 @@
         </div>
 
         <div class="player-section" id="stage-container">
-          <div id="youtube-player-inv-wrapper" hidden>
-            <div id="youtube-player-inv"></div>
-          </div>
+          <video id="video-player-inv" controls playsinline preload="auto" hidden></video>
           <img id="stage-image" class="stage-image" alt="Imagen de estímulo" hidden>
 
           <div class="rest-screen" id="rest-screen-inv" hidden>
             <button id="btn-continue-next-inv" class="btn-rest-next">Siguiente tarea</button>
-            <button id="btn-start-task-inv" class="btn-rest-next" hidden>Iniciar tarea</button>
+            <button id="btn-start-task-inv" class="btn-rest-next" hidden>Continuar a la tarea</button>
           </div>
 
           <div class="custom-controls" id="custom-controls">
@@ -147,7 +145,7 @@
     </div>
   </section>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="js/video-cache.js"></script>
   <script src="js/investigacion.js"></script>
 </body>
 
