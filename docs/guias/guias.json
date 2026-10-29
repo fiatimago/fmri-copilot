@@ -1,0 +1,34 @@
+[
+  {
+    "id": "instalacion",
+    "grupo": "Preparar el equipo",
+    "titulo": "Instalación del entorno",
+    "archivo": "instalacion_entorno.md",
+    "version": "v2",
+    "fecha": "2026-10"
+  },
+  {
+    "id": "entrevista",
+    "grupo": "Antes del estudio",
+    "titulo": "Entrevista y guion al paciente",
+    "archivo": "entrevista_paciente.md",
+    "version": "v2",
+    "fecha": "2026-10"
+  },
+  {
+    "id": "validacion",
+    "grupo": "Durante el estudio",
+    "titulo": "Validación en el equipo",
+    "archivo": "validacion_equipo.md",
+    "version": "v2",
+    "fecha": "2026-10"
+  },
+  {
+    "id": "procesamiento",
+    "grupo": "Después del estudio",
+    "titulo": "Procesamiento fMRI",
+    "archivo": "procesamiento_fmri.md",
+    "version": "v2",
+    "fecha": "2026-10"
+  }
+]
