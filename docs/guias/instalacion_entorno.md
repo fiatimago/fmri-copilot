@@ -1,4 +1,4 @@
-# Guía de instalación: entorno de neuroimagen en Ubuntu (WSL) — v2, organizada
+# Guía de instalación: entorno de neuroimagen en Ubuntu (WSL)
 
 ## Para qué sirve esta guía
 
@@ -8,9 +8,7 @@ Instala desde cero todo lo necesario para seguir la **Guía de procesamiento fMR
 - **`~/fiatimago`** — repositorios del equipo (Fiat Imago).
 - **`~/estudios`** — los estudios que se están procesando.
 
-**Todo se hace en la terminal de Ubuntu.** La única excepción es el paso 0, que instala Ubuntu.
-
-La misma estructura sirve para cualquier equipo: las rutas se escriben con `~` o `$HOME`, que es la carpeta del usuario (`/home/karen` en el portátil, `/home/neuro` en el trabajo). Por eso los comandos funcionan sin cambios en los dos.
+**Todo se hace en la terminal de Ubuntu.** La única excepción es el paso 0, que instala Ubuntu. Para esto requieres permisos de administrador en Windows, habla con TI.
 
 ---
 
@@ -21,19 +19,18 @@ La misma estructura sirve para cualquier equipo: las rutas se escriben con `~` o
 - Cuando un comando lleva `sudo`, Ubuntu pide **tu contraseña de Linux**. Mientras la escribes **no aparece nada en pantalla**, ni asteriscos. Eso es normal: escríbela y presiona Enter.
 - Lo que aparece en `MAYÚSCULAS_CON_GUION` (por ejemplo `TU_USUARIO_DE_WINDOWS`) hay que reemplazarlo por tu dato real.
 - Deja el computador **conectado a la corriente**. Todo el proceso toma 2–3 horas, casi todo descargas, y ocupa unos 50 GB.
-- **Comillas:** si copias desde Word o PDF y ves `SyntaxError: invalid character`, son comillas curvas (`' '`). Bórralas y escríbelas a mano en la terminal.
 
 ---
 
 ## Estructura final
 
 ```
-/home/karen/
+/home/TU_USUARIO/
 ├── programas/
-│   ├── instaladores/           ← archivos descargados (.py .sh .deb .zip); se pueden borrar al final
+│   ├── instaladores/           ← archivos descargados (.py .sh .deb .zip)
 │   ├── config/
-│   │   ├── entorno.sh          ← TODAS las rutas y variables (igual en todos los equipos)
-│   │   └── local.sh            ← (opcional) ajustes que solo aplican a ESTE equipo
+│   │   ├── entorno.sh          ← TODAS las rutas y variables
+│   │   └── local.sh            ← (opcional) ajustes solo para TU equipo
 │   ├── fsl/                    ← FSL + FSLeyes + FEAT
 │   ├── miniconda3/             ← Python y el entorno bioimg
 │   ├── mango/                  ← visor Mango
@@ -41,21 +38,20 @@ La misma estructura sirve para cualquier equipo: las rutas se escriben con `~` o
 │   ├── radiolili/              ← nii2dicom, fmri_confounds_extract, nifti2dicom
 │   └── templateflow/           ← plantillas MNI que descargan fMRIPrep y ANTs
 │
-├── fiatimago/
-│   └── radio-tools/            ← repo del equipo (por ahora vacío)
-│
+├── fiatimago/                  ← organización del equipo con sus repos
+│   └── radio-tools/            
+│   └── ...
+|
 ├── estudios/
 │   ├── disenos/                ← 100x20.fsf, 150x30.fsf
 │   ├── fmri/
-│   │   └── PSEUDONIMO/         ← un estudio = una carpeta
+│   │   └── NOMBRE_PACIENTE/    ← un paciente = una carpeta
 │   └── volumetria/
-│       └── PSEUDONIMO/
+│       └── NOMBRE_PACIENTE/
 │
-├── license.txt                                   ← licencia FreeSurfer (igual que en la guía)
+├── license.txt                 ← licencia FreeSurfer
 └── .cache/templateflow  → programas/templateflow (acceso directo)
 ```
-
-**¿Por qué hay un acceso directo?** La guía de procesamiento busca las plantillas en `$HOME/.cache/templateflow`. La carpeta real vive dentro de `programas/`, y el acceso directo hace que los comandos de la guía la encuentren **sin cambiar ni una letra**. La licencia, en cambio, queda directamente en `~/license.txt`, igual que en la guía.
 
 ---
 
@@ -84,7 +80,7 @@ La misma estructura sirve para cualquier equipo: las rutas se escriben con `~` o
 
 ---
 
-## Paso 0 — Instalar Ubuntu 22.04 (único paso en PowerShell)
+## Paso 0 — Instalar Ubuntu 22.04 (NECESITAS PERMISO DE TI)
 
 Abre PowerShell y ejecuta:
 
@@ -93,8 +89,8 @@ wsl --install -d Ubuntu-22.04
 ```
 
 Se abre una ventana de Ubuntu que pide:
-- **Usuario:** `karen` (en el trabajo es `neuro`)
-- **Contraseña:** la que quieras. No se ve mientras escribes.
+- **Usuario:** `neuro`
+- **Contraseña:** preguntar al equipo o elegir una tu.
 
 Si la ventana no se abre sola, busca **"Ubuntu 22.04"** en el menú de inicio.
 
@@ -132,9 +128,8 @@ Este archivo reúne **todas las rutas y variables** en un solo lugar y reemplaza
 
 Dos detalles de cómo funciona:
 
-- **Funciona en cualquier equipo.** Busca cada programa en la estructura nueva (`~/programas/...`) y, si no lo encuentra, en la antigua (`~/fsl`, `~/miniconda3`, `~/Mango`, `~/trabajo`). Así sirve también en equipos que todavía no se han migrado.
+- **Funciona en cualquier equipo.** Busca cada programa en la estructura nueva (`~/programas/...`) y, si no lo encuentra, en la antigua (`~/fsl`, `~/miniconda3`, `~/Mango`, `~/trabajo`).
 - **Calcula la RAM y los núcleos del equipo.** fMRIPrep usa el 80 % de la RAM que tiene WSL, y todos los núcleos menos 2.
-- Si un programa todavía no está instalado, lo salta sin dar error.
 
 ```bash
 cat > ~/programas/config/entorno.sh << 'EOF'
@@ -330,7 +325,7 @@ docker pull antsx/ants:latest
 docker images
 ```
 
-Si la red tiene un proxy con certificado propio (pasa en redes institucionales), puede salir un error SSL. En ese caso prueba con otra red.
+Si la red tiene un proxy con certificado propio (pasa en redes institucionales), puede salir un error SSL. En ese caso prueba con otra red o usa un VPN.
 
 ---
 
@@ -495,17 +490,16 @@ Cierra y vuelve a abrir Ubuntu, y escribe:
 ```bash
 mango
 ```
+Deberia abrir la ventana de mango. Da click en quit y continua.
 
 ---
 
-## Paso 13 — Repositorio del equipo (Fiat Imago)
+## Paso 13 — Repositorio del equipo (Fiatimago)
 
 ```bash
 cd ~/fiatimago
 git clone https://github.com/fiatimago/radio-tools.git
 ```
-
-Si el repo todavía está vacío, aparece el aviso *"You appear to have cloned an empty repository"*. Es normal.
 
 ---
 
@@ -558,15 +552,15 @@ ls $DISENOS
 
 Checklist:
 
-- [ ] Las rutas muestran `/home/karen/programas/...`
-- [ ] `~/license.txt` existe, y `templateflow` y `freesurfer` muestran flechas `→`
-- [ ] Docker lista las 4 imágenes
-- [ ] FSL, FSLeyes y FEAT responden
-- [ ] FreeSurfer muestra la versión 7.4.1
-- [ ] Python dice `OK`
-- [ ] Los dos comandos de RadioLili responden
-- [ ] `disenos` tiene los dos `.fsf`
-- [ ] `mango` abre el visor
+- Las rutas muestran `/home/karen/programas/...`
+- `~/license.txt` existe, y `templateflow` y `freesurfer` muestran flechas `→`
+- Docker lista las 4 imágenes
+- FSL, FSLeyes y FEAT responden
+- FreeSurfer muestra la versión 7.4.1
+- Python dice `OK`
+- Los dos comandos de RadioLili responden
+- `disenos` tiene los dos `.fsf`
+- `mango` abre el visor
 
 Para liberar espacio, borra los instaladores:
 
@@ -576,54 +570,9 @@ rm -rf ~/programas/instaladores/*
 
 ---
 
-## Cómo se procesa un estudio con esta estructura
-
-### Crear el estudio
-
-Usa un **pseudónimo** sin espacios, tildes ni ñ, que no se repita entre estudios:
-
-```bash
-PSEUDO="PSEUDONIMO"
-mkdir -p ~/estudios/fmri/$PSEUDO/dicom/sub-01
-```
-
-Copia los DICOM exportados. En Ubuntu el disco `C:` es `/mnt/c` y una USB suele aparecer como `/mnt/d`:
-
-```bash
-cp -r "/mnt/c/RUTA/DEL/EXPORT/"* ~/estudios/fmri/$PSEUDO/dicom/sub-01/
-```
-
-### Variables al inicio (reemplaza el bloque "Definición de variables de ruta" de la guía)
-
-```bash
-# --- EDITAR SOLO ESTA SECCIÓN ---
-PSEUDO="PSEUDONIMO"
-BASE_DIR="$ESTUDIOS/fmri/$PSEUDO"
-SUBJ_ID="01"
-LICENSE_PATH="$HOME/license.txt"
-cd $BASE_DIR
-# --------------------------------
-```
-
-Desde aquí, **la guía de procesamiento se sigue igual**, con estas diferencias:
-
-| En la guía antigua | Ahora |
-|---|---|
-| "Abra Docker Desktop" | No hace falta: Docker arranca solo |
-| `BASE_DIR="/mnt/c/..."` | `BASE_DIR="$ESTUDIOS/fmri/$PSEUDO"` |
-| fMRIPrep `--n_cpus 6 --mem 20000` | `--n_cpus $FMRIPREP_NCPUS --mem $FMRIPREP_MEM` (cada equipo usa su RAM) |
-| Cargar `100x20.fsf` / `150x30.fsf` en FEAT | Están en `~/estudios/disenos/` |
-| `bidsmap.yaml` | Sin cambios: bidsmapper lo crea en `bids_output/code/bidscoin/` de cada estudio |
-
-### Después del procesamiento
-
-Cada mes, desde el computador del trabajo, se copia a InvesNeuro lo de `~/estudios/fmri/` y `~/estudios/volumetria/`, y luego se limpian esas dos carpetas. `disenos/` no se toca.
-
----
-
 ## Notas para replicar en los equipos del trabajo
 
-- La guía es la misma. En el paso 0 el usuario es `neuro`, y como todo usa `~` o `$HOME`, las rutas se ajustan solas a `/home/neuro/...`.
+- En el paso 0 el usuario es `neuro`, y como todo usa `~` o `$HOME`, las rutas se ajustan solas a `/home/neuro/...`.
 - En el paso 4.1, ajusta `memory` y `processors` a la RAM y los procesadores de ese equipo.
 - `entorno.sh` también reconoce la estructura antigua (`~/fsl`, `~/miniconda3`, `~/Mango`, `~/trabajo`). Así, un equipo que todavía no se ha migrado sigue funcionando con los mismos comandos.
 - Por el firewall institucional, lo único que se ejecuta fuera de Ubuntu es el paso 0 (`wsl --install`).
@@ -701,7 +650,7 @@ La primera vez puede tardar unos segundos en abrir.
    ```
    /home/USUARIO/programas/miniconda3/envs/bioimg/bin/python
    ```
-   (`USUARIO` es `karen` en el portátil y `neuro` en el trabajo).
+   (`USUARIO` es `neuro` en el trabajo).
 
 Para confirmar que el modo portable funciona:
 
@@ -749,7 +698,7 @@ No hace falta configurar llaves SSH ni tokens: VS Code se encarga de identificar
 
 ### 17.3 Cómo trabajar
 
-1. Abre el repo:
+1. Abre el repo, por ejemplo:
    ```bash
    code ~/fiatimago/radio-tools &
    ```
@@ -758,20 +707,4 @@ No hace falta configurar llaves SSH ni tokens: VS Code se encarga de identificar
 4. Escribe un mensaje que describa el cambio y haz clic en **Commit**.
 5. Haz clic en **Sync Changes** o **Push** para subirlo a GitHub.
 
-| Acción | Qué hace | ¿Necesita sesión de GitHub? |
-|---|---|---|
-| **Commit** | Guarda una "foto" de los cambios en tu computador | No |
-| **Push / Sync** | Sube los commits a GitHub | Sí (la de VS Code) |
-| **Pull** | Baja los cambios que otros subieron | Sí (en repos privados) |
-
 > **Importante:** la sesión de GitHub vive **dentro de VS Code**. Haz los push desde VS Code o desde su terminal integrada (**View → Terminal**). Si haces `git push` desde la terminal normal de Ubuntu, te pedirá usuario y token.
-
-### 17.4 Clonar un repo nuevo
-
-```bash
-cd ~/fiatimago
-git clone https://github.com/fiatimago/NOMBRE_DEL_REPO.git
-code NOMBRE_DEL_REPO &
-```
-
-Si el repo es privado y la terminal pide usuario y contraseña, haz la clonación desde VS Code: **Ctrl+Shift+P → Git: Clone**, pega la URL y elige la carpeta `~/fiatimago`.
