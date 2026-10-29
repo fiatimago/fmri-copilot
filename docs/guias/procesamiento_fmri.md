@@ -31,11 +31,11 @@ Los DICOM se copian a Ubuntu en el paso 1.
 ```bash
 # --- EDITAR SOLO ESTA SECCIÓN ---
 NAME="NAME"                     # nombre paciente
-USER="f000"                     # Tu usuario
+YOURUSER="f000"                     # Tu usuario
 SUBJ_ID="01"                    # ID BIDS del sujeto
 ```
 ```bash
-EXPORT_DIR="/mnt/c/Users/$USER/Documents/estudios/fmri/$NAME" # carpeta con los DICOM
+EXPORT_DIR="/mnt/c/Users/$YOURUSER/Documents/estudios/fmri/$NAME" # carpeta con los DICOM
 BASE_DIR="$ESTUDIOS/fmri/$NAME"
 LICENSE_PATH="$HOME/license.txt"
 ```
