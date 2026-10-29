@@ -32,6 +32,7 @@ const btnStartTask = document.getElementById("btn-start-task");
 const btnPrevTask = document.getElementById("btn-prev-task");
 const btnNextTask = document.getElementById("btn-next-task");
 const btnPauseNav = document.getElementById("btn-pause-nav");
+const btnDownloadReport = document.getElementById("btn-download-report");
 const btnOpenPresenter = document.getElementById("btn-open-presenter");
 
 // ================== MODO PRESENTADOR (pantalla del paciente) ==================
@@ -77,6 +78,180 @@ if (presenterChannel) {
     if (event.data && event.data.type === "request-state") broadcastCurrentState();
   });
 }
+
+// ================== REGISTRO DE LO QUE REALMENTE SE REPRODUJO ==================
+// Cada video que llega a sonar (explicativo o tarea) genera una entrada con
+// hora de inicio/fin, tiempo efectivo reproduciéndose (sin contar pausas),
+// número de pausas y si terminó completo o se interrumpió (se cambió de
+// tarea, se recargó por idioma/lateralidad, etc.). El idioma y la
+// lateralidad se guardan por entrada porque pueden cambiar a mitad de sesión.
+const sessionLog = [];
+let currentLogEntry = null;
+const sessionStartedAt = new Date();
+
+function openLogEntry() {
+  const def = resolveTaskDef(currentTaskId);
+  const now = Date.now();
+  currentLogEntry = {
+    taskId: currentTaskId,
+    title: def ? def.title : currentTaskId,
+    segment: currentSegment, // "explainer" | "main"
+    videoId: currentSegment === "explainer" ? def.explainerYoutubeId : def.youtubeId,
+    language,
+    handedness,
+    startedAt: now,
+    endedAt: null,
+    playingSince: now,
+    playedMs: 0,
+    pauses: 0,
+    videoDurationS: isPlayerReady ? player.getDuration() : 0,
+    completed: false,
+  };
+  sessionLog.push(currentLogEntry);
+}
+
+function logPlaying() {
+  if (!currentLogEntry) openLogEntry();
+  else if (currentLogEntry.playingSince === null) currentLogEntry.playingSince = Date.now();
+  if (!currentLogEntry.videoDurationS && isPlayerReady) currentLogEntry.videoDurationS = player.getDuration();
+}
+
+function logPaused() {
+  const e = currentLogEntry;
+  if (!e || e.playingSince === null) return;
+  e.playedMs += Date.now() - e.playingSince;
+  e.playingSince = null;
+  e.pauses++;
+}
+
+// completed = true solo cuando YouTube avisa que el video terminó (ENDED).
+function closeLogEntry(completed) {
+  const e = currentLogEntry;
+  if (!e) return;
+  const now = Date.now();
+  if (e.playingSince !== null) e.playedMs += now - e.playingSince;
+  e.playingSince = null;
+  e.endedAt = now;
+  e.completed = completed;
+  currentLogEntry = null;
+}
+
+// ================== REPORTE DE LA SESIÓN ==================
+function msToClock(ms) {
+  const total = Math.round(ms / 1000);
+  return secondsToDuration(total);
+}
+
+function timeOfDay(ts) {
+  return new Date(ts).toLocaleTimeString("es-CO", { hour12: false });
+}
+
+const LANG_LABEL = { es: "Español", en: "English" };
+const HAND_LABEL = { diestro: "Diestro", zurdo: "Zurdo" };
+const SEGMENT_LABEL = { explainer: "Video explicativo", main: "Tarea" };
+
+// Copia de la entrada con los tiempos "hasta ahora" si el video sigue abierto.
+function snapshotEntry(e) {
+  const now = Date.now();
+  const playedMs = e.playedMs + (e.playingSince !== null ? now - e.playingSince : 0);
+  return { ...e, playedMs, wallMs: (e.endedAt || now) - e.startedAt, open: e.endedAt === null };
+}
+
+function entryStatus(s) {
+  if (s.open) return "en curso al generar el reporte";
+  return s.completed ? "completo" : "interrumpido";
+}
+
+function buildSessionReport() {
+  const now = new Date();
+  const entries = sessionLog.map(snapshotEntry);
+  const lines = [];
+
+  lines.push("REPORTE DE SESIÓN — FMRI Assistant (Nueva sesión)");
+  lines.push(`Generado: ${now.toLocaleString("es-CO")}`);
+  lines.push(`Página abierta desde: ${sessionStartedAt.toLocaleString("es-CO")}`);
+  lines.push("");
+  lines.push("Configuración al momento del reporte:");
+  lines.push(`  Videos explicativos: ${explainersEnabled ? "activados" : "desactivados"}`);
+  lines.push(`  Idioma: ${LANG_LABEL[language]}`);
+  lines.push(`  Lateralidad: ${HAND_LABEL[handedness]} (solo cambia el video de MENV)`);
+  lines.push("");
+
+  // ---- Secuencia planeada ----
+  lines.push("=".repeat(70));
+  lines.push("SECUENCIA PLANEADA (orden actual en la lista)");
+  lines.push("=".repeat(70));
+  if (sequence.length === 0) lines.push("  (vacía)");
+  sequence.forEach((taskId, i) => {
+    const def = resolveTaskDef(taskId);
+    const hasExplainer = explainersEnabled && durationToSeconds(def.explainerDuration) > 0;
+    const explainerText = explainersEnabled
+      ? `explicativo ${hasExplainer ? def.explainerDuration : "(duración sin definir)"}`
+      : "sin explicativo";
+    lines.push(`  ${i + 1}. ${def.title} (${taskId}) — tarea ${def.duration} | ${explainerText}`);
+  });
+  if (sequence.length > 0) lines.push(`  Duración total estimada: ${secondsToDuration(computeSequenceTotalSeconds())}`);
+  lines.push("");
+
+  // ---- Registro cronológico ----
+  lines.push("=".repeat(70));
+  lines.push("REGISTRO DE REPRODUCCIÓN (en el orden en que sonaron)");
+  lines.push("=".repeat(70));
+  lines.push("Reproducido = tiempo efectivo sonando (sin pausas). Total = desde que empezó hasta que terminó, con pausas.");
+  lines.push("");
+  if (entries.length === 0) lines.push("  (no se reprodujo ningún video)");
+  entries.forEach((s, i) => {
+    const end = s.open ? "…" : timeOfDay(s.endedAt);
+    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.title} (${s.taskId}) — ${SEGMENT_LABEL[s.segment]}`);
+    lines.push(`   Idioma: ${LANG_LABEL[s.language]} | Lateralidad: ${HAND_LABEL[s.handedness]} | Video YouTube: ${s.videoId}`);
+    lines.push(
+      `   Duración del video: ${s.videoDurationS ? msToClock(s.videoDurationS * 1000) : "—"} | ` +
+      `Reproducido: ${msToClock(s.playedMs)} | Total: ${msToClock(s.wallMs)} | Pausas: ${s.pauses}`
+    );
+    lines.push(`   Estado: ${entryStatus(s)}`);
+    lines.push("");
+  });
+
+  // ---- Resumen por tarea ----
+  lines.push("=".repeat(70));
+  lines.push("RESUMEN POR TAREA");
+  lines.push("=".repeat(70));
+  const taskIds = [...new Set([...sequence, ...entries.map((s) => s.taskId)])];
+  if (taskIds.length === 0) lines.push("  (sin tareas)");
+  taskIds.forEach((taskId) => {
+    const def = resolveTaskDef(taskId);
+    const ofTask = entries.filter((s) => s.taskId === taskId);
+    const describe = (segment) => {
+      const list = ofTask.filter((s) => s.segment === segment);
+      if (list.length === 0) return segment === "explainer" ? "no se mostró" : "no se reprodujo";
+      const played = list.reduce((sum, s) => sum + s.playedMs, 0);
+      const anyCompleted = list.some((s) => s.completed);
+      const times = list.length > 1 ? ` (${list.length} veces)` : "";
+      return `${anyCompleted ? "completo" : "incompleto"}${times}, reproducido ${msToClock(played)}`;
+    };
+    lines.push(`- ${def ? def.title : taskId} (${taskId})${sequence.includes(taskId) ? "" : " — ya no está en la secuencia"}`);
+    lines.push(`    Explicativo: ${describe("explainer")}`);
+    lines.push(`    Tarea:       ${describe("main")}`);
+  });
+
+  return lines.join("\n");
+}
+
+btnDownloadReport.addEventListener("click", () => {
+  const blob = new Blob([buildSessionReport()], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`; // hora local
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sesion-${stamp}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  btnDownloadReport.blur();
+});
 
 // ================== BOTÓN PAUSA / REANUDAR ==================
 btnPauseNav.addEventListener("click", () => {
@@ -387,6 +562,7 @@ sequenceList.addEventListener("drop", (e) => {
 function syncSequenceFromDOM() {
   sequence = [...sequenceList.querySelectorAll(".sequence-item")].map((li) => li.dataset.taskId);
   sequenceEmptyHint.hidden = sequence.length > 0;
+  btnDownloadReport.disabled = sequence.length === 0 && sessionLog.length === 0;
   refreshAvailableTasksState();
 
   if (sequence.length === 0) {
@@ -395,6 +571,7 @@ function syncSequenceFromDOM() {
     restScreen.hidden = true;
     btnPrevTask.disabled = true;
     btnNextTask.disabled = true;
+    closeLogEntry(false);
     if (isPlayerReady) player.stopVideo();
     clearInterval(presenterSyncInterval);
     postToPresenter({ type: "show-blank" });
@@ -435,6 +612,7 @@ function updateSequenceUI() {
 
 // ================== CARGA DE TAREAS (con o sin explicativo) ==================
 function loadTask(taskId) {
+  closeLogEntry(false); // si algo estaba a medias, queda registrado como interrumpido
   currentTaskId = taskId;
   restScreen.hidden = true;
   btnStartTask.hidden = true;
@@ -519,6 +697,7 @@ function onPlayerStateChange(event) {
 
   if (event.data === YT.PlayerState.PLAYING) {
     restScreen.hidden = true;
+    logPlaying();
     postToPresenter({ type: "seek-video", seconds: player.getCurrentTime() });
     postToPresenter({ type: "play-video" });
     // Corrige el desfase entre ambos reproductores cada 3s. La pantalla del
@@ -529,10 +708,12 @@ function onPlayerStateChange(event) {
       postToPresenter({ type: "seek-video", seconds: player.getCurrentTime() });
     }, 3000);
   } else if (event.data === YT.PlayerState.PAUSED) {
+    logPaused();
     clearInterval(presenterSyncInterval);
     postToPresenter({ type: "seek-video", seconds: player.getCurrentTime(), force: true });
     postToPresenter({ type: "pause-video" });
   } else if (event.data === YT.PlayerState.ENDED) {
+    closeLogEntry(true);
     clearInterval(presenterSyncInterval);
     if (currentSegment === "explainer") {
       currentSegment = "main";
