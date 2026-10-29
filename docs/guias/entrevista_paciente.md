@@ -10,11 +10,11 @@
 
 ## Paradigma motor unilateral (100x20)
 
-En unos momentos, alguien ingresará a la sala y colocará una esponja en su mano derecha/izquierda. Por favor, no intente mirar hacia abajo ni moverse. Manténgase completamente quieto.
+En unos momentos, alguien ingresará a la sala y colocará una esponja en su mano **derecha/izquierda**. Por favor, no intente mirar hacia abajo ni moverse. Manténgase completamente quieto.
 
 Si entendió, por favor mueva el dedo.
 
-En esta tarea le mostraremos unas imágenes donde aparecerá una mano. Cuando la mano tenga una equis roja, debe quedarse quieto. Si la mano aparece sin la equis, debe apretar la esponja con su mano derecha/izquierda usando todos los dedos, incluyendo el pulgar. Tenga en cuenta que el movimiento no debe ser ni muy rápido ni muy lento.
+En esta tarea le mostraremos unas imágenes donde aparecerá una mano. Cuando la mano tenga una equis roja, debe quedarse quieto. Si la mano aparece sin la equis, debe apretar la esponja con su mano **derecha/izquierda** usando todos los dedos, incluyendo el pulgar. Tenga en cuenta que el movimiento no debe ser ni muy rápido ni muy lento.
 
 Si entendió, por favor mueva el dedo.
 
@@ -30,9 +30,9 @@ Si entendió, por favor mueva el dedo.
 
 En la siguiente tarea, verá varios textos en la pantalla. Si el texto está compuesto por íconos desordenados y sin sentido, simplemente sígalos con la mirada, como si estuviera leyendo.
 
-Cuando el texto sea legible, léalo mentalmente; si el texto no ha cambiado, vuélvalo a leer hasta que cambie. Tenga en cuenta que los textos correctos forman una historia. Es muy importante que preste atención y recuerde la historia, ya que al final le realizaremos algunas preguntas sobre ella.
+Cuando el texto sea legible, léalo mentalmente; si el texto no ha cambiado, vuélvalo a leer hasta que cambie. Tenga en cuenta que los textos correctos forman una historia. Es muy importante que preste atención y recuerde la historia, ya que al final le realizaremos algunas preguntas sobre ella. Recuerde no hablar durante la tarea.
 
-Por favor, recuerde no hablar. Si entendió, por favor mueva el dedo.
+Si entendió, por favor mueva el dedo.
 
 > **Activaciones esperadas**
 >

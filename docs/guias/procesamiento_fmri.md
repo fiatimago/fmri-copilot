@@ -597,19 +597,22 @@ cd "$BASE_DIR"
 ```
 ```bash
 # --- EDITAR ---
-TAREA="MENV"  # código corto: nombre de la tarea
-FEAT_DIR="RUTA/AL/ARCHIVO/.FEAT/DE/LA/TAREA" # carpeta .feat
-DCMREF="RUTA/AL/ARCHIVO/DICOM/DE/REFERENCIA"
-# --------------
+DICOMREF="DICOM DE REFERENCIA"
+TAREA="MENV"
+NOMBREFEAT="NOMBRE DE LA CARPETA EN FUNC"
+```
+```bash
+FEAT_DIR="$BASE_DIR/fmriprep_output/sub-$SUBJ_ID/func/$NOMBREFEAT$"
+DCMREF="$BASE_DIR/dicom/sub-$SUBJ_ID/$DICOMREF"
 ```
 ```bash
 ANAT=$(ls "$BASE_DIR"/fmriprep_output/sub-$SUBJ_ID/anat/*space-MNI152NLin6Asym_res-2_desc-preproc_T1w.nii.gz)
-ZSTAT="$FEAT_DIR/stats/zstat1.nii.gz"
+ZSTAT="$FEAT_DIR/thresh_zstat1.nii.gz"
 SALIDA="$BASE_DIR/out_dicom/$TAREA"
 
 echo "Tarea:    $TAREA"
 echo "Anatomía: $ANAT"
-echo "Zstat:    $ZSTAT"
+echo "Thresh_zstat1:    $ZSTAT"
 echo "Salida:   $SALIDA"
 ls "$ANAT" "$ZSTAT" "$DCMREF"
 ```
