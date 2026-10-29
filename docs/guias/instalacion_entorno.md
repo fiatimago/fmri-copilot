@@ -342,7 +342,7 @@ python3 fslinstaller.py -d $HOME/programas/fsl
 Al terminar, **cierra Ubuntu y vuelve a abrirlo** para que `entorno.sh` cargue FSL. Verifica:
 
 ```bash
-echo $FSLDIR     # /home/karen/programas/fsl
+echo $FSLDIR     # /home/neuro/programas/fsl
 which fsl
 fsl &            # abre el menú de FSL (FEAT)
 fsleyes &        # abre FSLeyes
@@ -552,7 +552,7 @@ ls $DISENOS
 
 Checklist:
 
-- Las rutas muestran `/home/karen/programas/...`
+- Las rutas muestran `/home/neuro/programas/...`
 - `~/license.txt` existe, y `templateflow` y `freesurfer` muestran flechas `→`
 - Docker lista las 4 imágenes
 - FSL, FSLeyes y FEAT responden
