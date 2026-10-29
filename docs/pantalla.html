@@ -29,16 +29,12 @@
     }
 
     #stage-image,
-    #youtube-player-proj-wrapper,
-    #youtube-player-proj {
+    #stage-video {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-    }
-
-    #stage-image {
       object-fit: contain;
       background: #000;
     }
@@ -53,12 +49,11 @@
 
   <div id="stage">
     <img id="stage-image" alt="" hidden>
-    <div id="youtube-player-proj-wrapper" hidden>
-      <div id="youtube-player-proj"></div>
-    </div>
+    <!-- Silenciado: el audio sale de la ventana de control (mismo computador) -->
+    <video id="stage-video" muted playsinline preload="auto" hidden></video>
   </div>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="js/video-cache.js"></script>
   <script src="js/pantalla.js"></script>
 </body>
 

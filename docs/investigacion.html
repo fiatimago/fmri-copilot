@@ -35,25 +35,17 @@
         </div>
 
         <div class="player-section" id="stage-container">
-          <div id="youtube-player-inv-wrapper" hidden>
-            <div id="youtube-player-inv"></div>
-          </div>
+          <video id="video-player-inv" controls playsinline preload="auto" hidden></video>
           <img id="stage-image" class="stage-image" alt="Imagen de estímulo" hidden>
 
           <div class="rest-screen" id="rest-screen-inv" hidden>
             <button id="btn-continue-next-inv" class="btn-rest-next">Siguiente tarea</button>
+            <button id="btn-start-task-inv" class="btn-rest-next" hidden>Continuar a la tarea</button>
           </div>
 
           <div class="custom-controls" id="custom-controls">
             <div class="progress-bar-container" id="progress-bar-container">
               <div class="progress-bar-filled" id="progress-bar-filled"></div>
-            </div>
-            <div class="controls-buttons">
-              <button id="btn-play-pause-inv" class="control-btn" disabled title="Reproducir/Pausar">▶</button>
-              <button id="btn-reset-inv" class="control-btn" disabled title="Reiniciar">⟲</button>
-              <button id="btn-skip-step-inv" class="control-btn" disabled title="Terminar este paso ahora">⏭</button>
-              <button id="btn-extend-step-inv" class="control-btn" disabled title="Extender este paso 5s">+5s</button>
-              <button id="btn-fullscreen-inv" class="control-btn" disabled title="Pantalla completa">⛶</button>
             </div>
           </div>
         </div>
@@ -61,7 +53,7 @@
         <div class="task-nav-bar">
           <button id="btn-prev-instance" class="btn-secondary" disabled title="Instancia anterior">⏮ Anterior</button>
           <button id="btn-pause-images-nav" class="btn-secondary" disabled
-            title="Pausar/reproducir la secuencia de imágenes">▶</button>
+            title="Pausar/reanudar lo que está en pantalla (explicativo o imágenes). Atajo: barra espaciadora">▶</button>
           <button id="btn-next-instance" class="btn-secondary" disabled title="Siguiente instancia">Siguiente
             ⏭</button>
         </div>
@@ -139,6 +131,7 @@
 
         <h3>Secuencia de la sesión</h3>
         <p class="sequence-total" id="sequence-total-duration-inv"></p>
+        <p class="hint" id="preload-status-inv"></p>
         <button id="btn-download-report" class="btn-secondary" disabled>Descargar reporte de la sesión</button>
         <ol id="sequence-list-inv" class="sequence-list"></ol>
         <p id="sequence-empty-hint-inv" class="hint">Configura una tarea arriba y agrégala para armar la secuencia.</p>
@@ -147,7 +140,7 @@
     </div>
   </section>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="js/video-cache.js"></script>
   <script src="js/investigacion.js"></script>
 </body>
 
