@@ -1,4 +1,4 @@
-console.log("investigacion.js — versión con limpieza de escenario al borrar (v3)");
+console.log("investigacion.js — v4: sin pausa al ocultar la ventana, reloj en Web Worker");
 
 // ================== ESTADO ==================
 let allTasks = [];
@@ -50,7 +50,7 @@ function broadcastCurrentState() {
     }
     presenterChannel.postMessage({ type: "show-explainer", videoId: def.explainerYoutubeId });
     if (isYtPlayerReady) {
-      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime() });
+      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime(), force: true });
       presenterChannel.postMessage({ type: isPlaying ? "play-explainer" : "pause-explainer" });
     }
     return;
@@ -67,8 +67,42 @@ let nextInstanceNumber = 1;
 let currentStepIndex = -1;
 let playStartTimestamp = 0;
 let elapsedAtPauseMs = 0;
-let tickInterval = null;
 let isPlaying = false;
+
+// ================== RELOJ DE LA SECUENCIA ==================
+// Cuando la ventana de control queda oculta (minimizada, otra pestaña, o
+// tapada por la pantalla del paciente en pantalla completa), el navegador
+// frena los setInterval normales: a 1 vez por segundo y, tras unos minutos,
+// hasta 1 vez por minuto. Por eso antes la secuencia se pausaba al ocultarse.
+// Ahora el "tic" lo da un Web Worker, al que el navegador no le aplica ese
+// frenado, así la secuencia sigue a tiempo aunque la ventana no esté visible.
+// El tiempo transcurrido se sigue midiendo con Date.now(), así que un tic
+// tardío nunca acumula error: solo cambia la imagen un poco después.
+const sequenceTicker = (() => {
+  const TICK_MS = 50;
+  let worker = null;
+  let fallbackId = null;
+  try {
+    const src = `let id=null;onmessage=(e)=>{clearInterval(id);if(e.data==="start")id=setInterval(()=>postMessage(0),${TICK_MS});};`;
+    worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    worker.onmessage = () => tick();
+  } catch (err) {
+    console.warn("No se pudo crear el Worker del reloj; se usa setInterval (puede frenarse en segundo plano).", err);
+    worker = null;
+  }
+  return {
+    start() {
+      this.stop();
+      if (worker) worker.postMessage("start");
+      else fallbackId = setInterval(tick, TICK_MS);
+    },
+    stop() {
+      if (worker) worker.postMessage("stop");
+      clearInterval(fallbackId);
+      fallbackId = null;
+    },
+  };
+})();
 let imagesPreloaded = false;
 
 // Explicativos (reutilizan el mismo catálogo que "Nueva sesión")
@@ -806,7 +840,7 @@ function onYtPlayerStateChange(event) {
     updateSequenceUI();
     clearInterval(presenterSyncInterval);
     if (presenterChannel) {
-      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime() });
+      presenterChannel.postMessage({ type: "seek-explainer", seconds: ytPlayer.getCurrentTime(), force: true });
       presenterChannel.postMessage({ type: "pause-explainer" });
     }
   } else if (event.data === YT.PlayerState.ENDED) {
@@ -858,14 +892,14 @@ function startPlayback() {
   btnExtendStep.disabled = false;
 
   playStartTimestamp = Date.now() - elapsedAtPauseMs;
-  tickInterval = setInterval(tick, 50);
+  sequenceTicker.start();
   updateSequenceUI();
 }
 
 function pausePlayback() {
   isPlaying = false;
   setPlayPauseIcon("▶");
-  clearInterval(tickInterval);
+  sequenceTicker.stop();
   elapsedAtPauseMs = Date.now() - playStartTimestamp;
   btnSkipStep.disabled = true;
   btnExtendStep.disabled = true;
@@ -875,7 +909,7 @@ function pausePlayback() {
 function stopPlayback() {
   isPlaying = false;
   setPlayPauseIcon("▶");
-  clearInterval(tickInterval);
+  sequenceTicker.stop();
   elapsedAtPauseMs = 0;
   btnSkipStep.disabled = true;
   btnExtendStep.disabled = true;
@@ -973,8 +1007,10 @@ btnContinueNext.addEventListener("click", () => {
 });
 
 // ================== VISIBILIDAD DE LA PESTAÑA ==================
+// Ya NO se pausa la secuencia al ocultar la ventana: durante una adquisición
+// eso desalineaba el paradigma con el resonador. El reloj (Web Worker, ver
+// "RELOJ DE LA SECUENCIA") sigue corriendo; al volver a la ventana solo se
+// fuerza un tic para que la imagen en pantalla quede al día de inmediato.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isPlaying) {
-    pausePlayback();
-  }
+  if (!document.hidden && isPlaying) tick();
 });

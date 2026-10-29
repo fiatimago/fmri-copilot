@@ -30,6 +30,64 @@ const btnContinueNext = document.getElementById("btn-continue-next");
 
 const btnPrevTask = document.getElementById("btn-prev-task");
 const btnNextTask = document.getElementById("btn-next-task");
+const btnPauseNav = document.getElementById("btn-pause-nav");
+const btnOpenPresenter = document.getElementById("btn-open-presenter");
+
+// ================== MODO PRESENTADOR (pantalla del paciente) ==================
+// Misma idea que en Investigación: una ventana sin controles (pantalla.html)
+// que refleja el video que está sonando aquí, comunicada por
+// BroadcastChannel. Usa un canal propio ("sesion") para que no se cruce con
+// la pantalla del paciente de Investigación si ambas páginas están abiertas.
+const presenterChannel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("fmri-sesion-presenter") : null;
+let presenterSyncInterval = null; // reenvía la posición del video cada 3s mientras suena
+
+btnOpenPresenter.addEventListener("click", () => {
+  window.open("pantalla.html?canal=sesion", "fmri-pantalla-paciente-sesion", "width=1280,height=720");
+  btnOpenPresenter.blur();
+});
+
+function postToPresenter(msg) {
+  if (presenterChannel) presenterChannel.postMessage(msg);
+}
+
+function currentVideoId() {
+  const def = currentTaskId && resolveTaskDef(currentTaskId);
+  if (!def) return null;
+  return currentSegment === "explainer" ? def.explainerYoutubeId : def.youtubeId;
+}
+
+// Estado completo para una pantalla del paciente que se acaba de abrir/reabrir.
+function broadcastCurrentState() {
+  const videoId = currentVideoId();
+  if (!videoId || !restScreen.hidden) {
+    postToPresenter({ type: "show-blank" });
+    return;
+  }
+  postToPresenter({ type: "show-video", videoId });
+  if (isPlayerReady) {
+    const playing = player.getPlayerState() === YT.PlayerState.PLAYING;
+    postToPresenter({ type: "seek-video", seconds: player.getCurrentTime(), force: true });
+    postToPresenter({ type: playing ? "play-video" : "pause-video" });
+  }
+}
+
+if (presenterChannel) {
+  presenterChannel.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "request-state") broadcastCurrentState();
+  });
+}
+
+// ================== BOTÓN PAUSA / REANUDAR ==================
+btnPauseNav.addEventListener("click", () => {
+  if (isPlayerReady && currentTaskId && restScreen.hidden) togglePlayPause();
+  btnPauseNav.blur(); // evita que la barra espaciadora "haga clic" sobre el botón y pause dos veces
+});
+
+function updatePauseButtonState() {
+  btnPauseNav.disabled = !isPlayerReady || !currentTaskId || !restScreen.hidden;
+  const playing = isPlayerReady && player.getPlayerState() === YT.PlayerState.PLAYING;
+  btnPauseNav.textContent = playing ? "⏸" : "▶";
+}
 
 // ================== UTILIDADES ==================
 function whenReady(fn) {
@@ -337,6 +395,9 @@ function syncSequenceFromDOM() {
     btnPrevTask.disabled = true;
     btnNextTask.disabled = true;
     if (isPlayerReady) player.stopVideo();
+    clearInterval(presenterSyncInterval);
+    postToPresenter({ type: "show-blank" });
+    updatePauseButtonState();
     updateSequenceTotalLabel();
     return;
   }
@@ -382,9 +443,12 @@ function loadTask(taskId) {
   const videoId = startWithExplainer ? def.explainerYoutubeId : def.youtubeId;
 
   if (isPlayerReady) player.cueVideoById(videoId);
+  clearInterval(presenterSyncInterval);
+  postToPresenter({ type: "show-video", videoId });
   updateNowPlayingLabel();
   updateNavButtonsState();
   updateSequenceUI();
+  updatePauseButtonState();
 }
 
 function updateNowPlayingLabel() {
@@ -440,6 +504,7 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady() {
   isPlayerReady = true;
   if (currentTaskId) loadTask(currentTaskId);
+  updatePauseButtonState();
 }
 
 function onPlayerError(event) {
@@ -452,16 +517,35 @@ function onPlayerStateChange(event) {
 
   if (event.data === YT.PlayerState.PLAYING) {
     restScreen.hidden = true;
+    postToPresenter({ type: "seek-video", seconds: player.getCurrentTime() });
+    postToPresenter({ type: "play-video" });
+    // Corrige el desfase entre ambos reproductores cada 3s. La pantalla del
+    // paciente solo salta si la diferencia supera su umbral, así que no
+    // hay cortes visibles mientras estén sincronizados.
+    clearInterval(presenterSyncInterval);
+    presenterSyncInterval = setInterval(() => {
+      postToPresenter({ type: "seek-video", seconds: player.getCurrentTime() });
+    }, 3000);
+  } else if (event.data === YT.PlayerState.PAUSED) {
+    clearInterval(presenterSyncInterval);
+    postToPresenter({ type: "seek-video", seconds: player.getCurrentTime(), force: true });
+    postToPresenter({ type: "pause-video" });
   } else if (event.data === YT.PlayerState.ENDED) {
+    clearInterval(presenterSyncInterval);
     if (currentSegment === "explainer") {
       const def = resolveTaskDef(currentTaskId);
       currentSegment = "main";
+      // Primero avisar a la pantalla del paciente y luego cargar: así el
+      // "play" que dispara loadVideoById siempre le llega después del cambio de video.
+      postToPresenter({ type: "show-video", videoId: def.youtubeId });
       player.loadVideoById(def.youtubeId);
       updateNowPlayingLabel();
     } else {
       showRestScreen();
     }
   }
+
+  updatePauseButtonState();
 }
 
 function showRestScreen() {
@@ -469,6 +553,8 @@ function showRestScreen() {
   const isLast = index === -1 || index >= sequence.length - 1;
   btnContinueNext.hidden = isLast;
   restScreen.hidden = false;
+  postToPresenter({ type: "show-blank" });
+  updatePauseButtonState();
 }
 
 // ================== ATAJO DE BARRA ESPACIADORA (opcional) ==================
