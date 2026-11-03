@@ -40,12 +40,12 @@ Así, cuando se haga el procesamiento completo (paso 3), `bidscoin` solo lee `di
 
 ## Paso 0 — Pedir y exportar las BOLD
 
-1. Al terminar las tareas, pide al tecnólogo que **envíe a syngo.via las series BOLD** (las que llevan `ep2d_bold` en el nombre).
-2. En syngo.via, busca el estudio en el navegador de pacientes y selecciona **solo las series BOLD**.
-3. Clic en **Exportar → Archivo de sistema** y elige la carpeta de Windows **`C:\fmri\validacion\NAME`** (reemplaza `NAME` por el mismo nombre que usarás en el paso 1).
+1. Al terminar las tareas, pide al tecnólogo que **envíe a syngo.via la serie volumetrica y las series BOLD** (la anatómica T1 y las que llevan `ep2d_bold` en el nombre).
+2. En syngo.via, busca el estudio en el navegador de pacientes y selecciona **solo la T1 y las series BOLD**.
+3. Clic en **Exportar → Archivo de sistema** y elige la carpeta de Windows **`C:\Users\TU_USUARIO\Documents\estudios\fmri\NAME\validacion\`** (reemplaza `NAME` por el mismo nombre que usarás en el paso 1 para el paciente).
 4. Valida que estén todas las series y que la exportación haya sido exitosa.
 
-> Usa `C:\fmri\validacion\...` y **no** `C:\fmri\NAME`. Esa segunda carpeta es la del export completo del paso 3; si se mezclan, el procesamiento completo recibe series BOLD duplicadas.
+> Usa `C:...\NAME\validacion\...` y **no** `C:...\NAME`. Esa segunda carpeta es la del export completo del paso 3; si se mezclan, el procesamiento completo recibe series BOLD duplicadas.
 
 ---
 
@@ -55,9 +55,11 @@ Así, cuando se haga el procesamiento completo (paso 3), `bidscoin` solo lee `di
 
 ```bash
 # --- EDITAR SOLO ESTA SECCIÓN ---
-NAME="NAME"                                  # mismo nombre que usarás en el paso 3
-EXPORT_DIR="/mnt/c/fmri/validacion/$NAME"    # carpeta del export de syngo.via
-# --------------------------------
+NAME="NAME"                    # nombre del paciente, mismo del paso 3
+YOURUSER="YOURUSER"                # tu usuario de Windows f000
+```
+```bash
+EXPORT_DIR="/mnt/c/Users/$YOURUSER/Documents/estudios/fmri/$NAME/validacion/"    # carpeta del export de syngo.via
 VAL_DIR="$ESTUDIOS/fmri/$NAME/validacion"
 ```
 
@@ -129,10 +131,6 @@ Se abre la ventana de FEAT:
 
 1. Clic en **Load**, abajo.
 2. Navega a la carpeta de diseños. Para ver la ruta exacta:
-   ```bash
-   echo $DISENOS
-   ```
-   Puedes pegar esa ruta en el campo **Filter** de la ventana y dar Enter.
 3. Elige **`100x20.fsf`** o **`150x30.fsf`** según la tabla 3.1 y clic en **OK**.
 
 FEAT se actualiza con los datos del diseño:
@@ -147,9 +145,6 @@ FEAT se actualiza con los datos del diseño:
    ![Ventana Select input data](guias/img/validacion/select_4d.png)
 
 3. Navega a la carpeta de NIfTI. Para ver la ruta:
-   ```bash
-   echo "$VAL_DIR/nifti/"
-   ```
 4. Elige el `.nii.gz` de la tarea (el que lleva `bold` y el nombre de la tarea) y clic en **OK**, y otra vez **OK**.
 5. Revisa en la pestaña **Data** que:
    - **Total volumes** coincida con la tabla 3.1 (100, 150 o 60).
@@ -196,15 +191,8 @@ Para cada tarea, en `report.html`:
 
 ### Si una tarea no pasa
 
-Avísale de inmediato al tecnólogo y al equipo, con el paciente todavía en el equipo, para decidir si se repite esa tarea. Si se repite, exporta de nuevo esa serie (paso 0), cópiala (paso 1.2) y conviértela (paso 2): `dcm2niix` le pone otra hora en el nombre, así que no pisa la anterior.
+Avísale de inmediato al radiólogo y al tecnólogo, con el paciente todavía en el equipo, para decidir si se repite esa tarea. Si se repite, exporta de nuevo esa serie (paso 0), cópiala (paso 1.2) y conviértela (paso 2): `dcm2niix` le pone otra hora en el nombre, así que no pisa la anterior.
 
 Al terminar todas las tareas, cierra FEAT.
 
 ---
-
-## Solución de problemas
-
-- **`dcm2niix: command not found`** → no activaste `bioimg`. Ejecuta `conda activate bioimg` y repite el paso 2.
-- **FSL o FEAT dan errores raros de Python** → `bioimg` quedó activo. Ejecuta `conda deactivate` y vuelve a abrir `fsl &`.
-- **`echo $VAL_DIR` sale vacío** → cerraste la terminal. Vuelve a pegar el bloque 1.1.
-- **No abre ninguna ventana de FSL** o sale en blanco → ver **Reiniciar WSL** en la [guía de procesamiento](#procesamiento).
