@@ -763,7 +763,7 @@ function buildSessionReport() {
   const entries = sessionLog.map(snapshotEntry);
   const sep = "=".repeat(70);
 
-  lines.push("REPORTE DE SESIÓN — FMRI Assistant (Investigación)");
+  lines.push("REPORTE DE SESIÓN — fMRI Copilot (Investigación)");
   lines.push(`Generado: ${now.toLocaleString("es-CO")}`);
   lines.push(`Página abierta desde: ${sessionStartedAt.toLocaleString("es-CO")}`);
   lines.push("");
