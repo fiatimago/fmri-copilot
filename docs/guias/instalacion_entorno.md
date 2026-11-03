@@ -342,7 +342,7 @@ python3 fslinstaller.py -d $HOME/programas/fsl
 Al terminar, **cierra Ubuntu y vuelve a abrirlo** para que `entorno.sh` cargue FSL. Verifica:
 
 ```bash
-echo $FSLDIR     # /home/neuro/programas/fsl
+echo $FSLDIR     # /home/TU_USUARIO/programas/fsl
 which fsl
 fsl &            # abre el menú de FSL (FEAT)
 fsleyes &        # abre FSLeyes

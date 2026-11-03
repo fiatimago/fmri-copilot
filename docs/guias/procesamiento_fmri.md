@@ -602,7 +602,7 @@ TAREA="MENV"
 NOMBREFEAT="NOMBRE DE LA CARPETA EN FUNC"
 ```
 ```bash
-FEAT_DIR="$BASE_DIR/fmriprep_output/sub-$SUBJ_ID/func/$NOMBREFEAT$"
+FEAT_DIR="$BASE_DIR/fmriprep_output/sub-$SUBJ_ID/func/$NOMBREFEAT"
 DCMREF="$BASE_DIR/dicom/sub-$SUBJ_ID/$DICOMREF"
 ```
 ```bash
