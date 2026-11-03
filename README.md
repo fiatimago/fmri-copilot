@@ -1,105 +1,173 @@
-# FMRI Assistant
+# fMRI Copilot
 
-Herramienta web para organizar y reproducir, desde el computador de la sala de control del resonador, los videos de los paradigmas que el paciente debe realizar durante un estudio de resonancia magnética funcional (fMRI).
+Herramienta web para presentar, desde el computador de la sala de control del resonador, los paradigmas que el paciente realiza durante un estudio de resonancia magnética funcional (fMRI): videos explicativos, videos de las tareas y secuencias de imágenes por bloques. Incluye además las guías del equipo para preparar el entorno, entrevistar al paciente, validar en el equipo y procesar los estudios.
 
-Reemplaza el flujo actual de transportar un computador hasta el resonador para transmitir los paradigmas, todo corre directamente desde el navegador del equipo ya instalado en la sala.
+Reemplaza el flujo de transportar un computador hasta el resonador: todo corre en el navegador del equipo ya instalado en la sala.
+
+Publicada en: **https://fiatimago.github.io/fmri-copilot/**
 
 ![Status](https://img.shields.io/badge/status-en%20desarrollo-yellow)
 
 ---
 
-## Características
+## Alcance y limitaciones
 
-- **Selección y orden de tareas por arrastre (drag & drop) o por botones:** arma la secuencia de la sesión arrastrando las tareas disponibles, o agrégalas con el botón "+" y reordénalas con las flechas ▲▼.
-- **Controles de reproducción:** reproducir/pausar (incluye atajo de barra espaciadora), retroceder/adelantar 10s, reiniciar, navegar entre tareas, pantalla completa.
-- **Barra de progreso interactiva:** clic o arrastre para saltar a cualquier punto del video.
-- **Bloqueo inteligente:** una tarea no se puede reordenar ni eliminar mientras se está reproduciendo, evitando interrupciones accidentales durante la adquisición.
-- **Pantalla de descanso:** al terminar cada video se muestra una pantalla negra con un botón para continuar a la siguiente tarea, pensada para el descanso del paciente entre paradigmas.
-- **Interfaz limpia:** sin distracciones de YouTube (controles nativos, videos sugeridos y anotaciones ocultos).
-- **Páginas reales independientes:** Home, Nueva sesión e Investigación son archivos HTML separados, cada uno con su propia URL, por lo que se pueden recargar o abrir directamente por link sin errores.
+- Es una **herramienta interna de presentación de estímulos**. No es un dispositivo médico ni software de diagnóstico, y no procesa ni almacena datos de pacientes.
+- **El inicio de cada tarea es manual** (botón ▶ o barra espaciadora). No se sincroniza con el pulso de disparo del resonador.
+- **Si se pausa una tarea durante la adquisición, sus tiempos dejan de coincidir con el diseño del análisis** (archivo `.fsf` de FEAT). El reporte de la sesión deja constancia de cada pausa con la hora y el segundo del paradigma en que ocurrió.
 
 ---
 
-## Cómo usarlo
+## Páginas
 
-1. Entra a **Nueva sesión**.
-2. Haz clic en **Mostrar tareas disponibles** para desplegar el catálogo de paradigmas.
-3. Agrega las tareas que se van a evaluar con el botón **+**, o arrástralas hacia el cuadro de secuencia.
-4. Ordénalas con las flechas ▲▼, o arrastrándolas directamente.
-5. La primera tarea de la secuencia se carga automáticamente en el reproductor (en pausa).
-6. Usa los controles o la **barra espaciadora** para reproducir.
-7. Al terminar un video, aparece la pantalla de descanso; haz clic en **Siguiente tarea** para continuar.
+| Página | Para qué sirve |
+|---|---|
+| **Nueva sesión** (`nueva-sesion.html`) | Arma y reproduce la secuencia clínica de paradigmas en video. |
+| **Investigación** (`investigacion.html`) | Arma y reproduce paradigmas como secuencias de imágenes por bloques, con número de bloques, duración y estímulos por bloque configurables. |
+| **Pantalla del paciente** (`pantalla.html`) | Ventana sin controles que muestra al paciente lo mismo que la ventana de control. Se abre desde las dos páginas anteriores. |
+| **Guías** (`guias.html`) | Guías del equipo, escritas en markdown: instalación del entorno, entrevista al paciente, validación en el equipo y procesamiento fMRI. |
+
+---
+
+## Características
+
+### Nueva sesión e Investigación
+- **Secuencia de tareas:** se agregan con **+** (o arrastrándolas, en Nueva sesión) y se reordenan con ▲▼. Al armar la secuencia se carga la primera tarea de la lista. En Investigación, mientras la sesión no haya empezado, el escenario sigue a la primera aunque se reordene la lista.
+- **Idioma (Español/English), lateralidad (diestro/zurdo) y videos explicativos** activables. La lateralidad solo cambia el explicativo de MENV.
+- **Controles:** Anterior, ▶/⏸ y Siguiente, más la **barra espaciadora**. Todo lo que se reproduce arranca siempre con ▶.
+- **Pantallas negras entre momentos:**
+  - al terminar el explicativo, la tarea queda en pausa detrás de **"Continuar a la tarea"**;
+  - al terminar la tarea, aparece **"Siguiente tarea"**.
+- **Bloqueo:** la tarea que se está reproduciendo no se puede mover ni quitar.
+- **Pantalla del paciente:** se sincroniza por `BroadcastChannel`, va silenciada (el audio sale de la ventana de control) y se pone en negro en las pausas y si se cierra la ventana de control.
+- **Videos sin conexión:** al agregar una tarea, sus videos se descargan completos al navegador y quedan guardados para las siguientes sesiones. Cada tarea muestra "✓ listo sin conexión" cuando su video está descargado.
+- **Reporte de la sesión (.txt):** incluye la configuración, la secuencia programada y el registro de lo que realmente pasó: hora de inicio y fin de cada video o secuencia, tiempo efectivo, pausas y si terminó completo o se interrumpió.
+- **Protección de la sesión:** mientras haya una sesión armada, los enlaces de la barra se abren en otra pestaña y el navegador pide confirmación antes de recargar o cerrar.
+
+### Solo en Investigación
+- **Configuración por tarea:** número de bloques (pares reposo/activación), duración de cada bloque y estímulos por bloque. Si se piden más imágenes de las que hay, se repiten en orden (loop) o aleatorizadas (random), sin mezclar reposo con activación.
+- **El reporte incluye el detalle de imágenes por bloque** en el orden mostrado y el vector de clasificación de cada una: 0 = el paciente permanece quieto, 1 = el paciente mueve el dedo.
+- **El reloj de la secuencia corre en un Web Worker**, así que la secuencia sigue a tiempo aunque la ventana de control quede oculta o tapada.
+
+---
+
+## Cómo usarlo en la sala
+
+1. Entra a **Nueva sesión** (o **Investigación**) y elige idioma, lateralidad y si van los videos explicativos.
+2. Agrega las tareas y ordénalas. **Espera a que todas marquen "✓ listo sin conexión"** antes de empezar.
+3. Haz clic en **🖥️ Pantalla del paciente**, arrastra esa ventana al monitor del paciente y ponla en pantalla completa con **F11**.
+4. Reproduce el explicativo con **▶**. Al terminar, haz clic en **Continuar a la tarea** y, cuando el paciente y el resonador estén listos, arranca la tarea con **▶**.
+5. Al terminar la tarea, haz clic en **Siguiente tarea** y repite.
+6. **Descarga el reporte antes de cerrar la página:** el registro solo vive mientras la página está abierta.
 
 ---
 
 ## Stack técnico
 
-Este proyecto es intencionalmente simple: **HTML, CSS y JavaScript puro**, sin frameworks ni build steps. Se aloja como sitio estático en **GitHub Pages**, con una página HTML real por cada sección (no una sola página con vistas ocultas por JavaScript).
+Intencionalmente simple: **HTML, CSS y JavaScript puro**, sin frameworks ni build steps, alojado como sitio estático en **GitHub Pages** (carpeta `docs/`). Cada sección es un archivo HTML real con su propia URL.
 
 | Pieza | Tecnología |
 |---|---|
-| Reproducción de video | [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) |
+| Reproducción de video | Elemento `<video>` del navegador, con archivos propios en `docs/videos/` |
+| Descarga previa y caché de videos | Cache Storage del navegador (`js/video-cache.js`) |
+| Pantalla del paciente | `BroadcastChannel` entre ventanas del mismo sitio |
+| Reloj de Investigación | Web Worker |
+| Guías | Markdown convertido con [marked](https://marked.js.org/) (se carga desde `cdn.jsdelivr.net`) |
 | Hosting | GitHub Pages |
-| Catálogo de tareas | `data/tasks.json` |
+
+La página de guías necesita acceso a `cdn.jsdelivr.net` para cargar `marked`. Si la red lo bloquea, las guías no se muestran; el resto del sitio no depende de eso.
 
 ---
 
 ## Estructura del repositorio
 
 ```
-FMRI_Task_Visualizer/
-├── private/  # Configuración sensible
-├── docs/     # Raíz servida por GitHub Pages
-│   ├── index.html    # Home
-│   ├── nueva-sesion.html
-│   ├── investigacion.html 
-│   ├── css/
-│   │   └── style.css # Estilos
+fmri-copilot/
+├── private/                      # Configuración sensible (ignorada por git, salvo .gitkeep)
+├── docs/                         # Raíz servida por GitHub Pages
+│   ├── index.html                # Home
+│   ├── nueva-sesion.html         # Sesión clínica con videos
+│   ├── investigacion.html        # Paradigmas por imágenes
+│   ├── pantalla.html             # Pantalla del paciente
+│   ├── guias.html                # Visor de guías
+│   ├── css/style.css
 │   ├── js/
-│   │   └── session.js  # Lógica
+│   │   ├── session.js            # Lógica de Nueva sesión
+│   │   ├── investigacion.js      # Lógica de Investigación
+│   │   ├── pantalla.js           # Lógica de la pantalla del paciente
+│   │   └── video-cache.js        # Descarga, caché y duración de los videos
 │   ├── data/
-│   │   └── tasks.json # Lista de tareas
-│   ├── assets/
-│   │   └── logo.png
+│   │   ├── tasks.json            # Videos de cada tarea (idioma, lateralidad)
+│   │   └── investigacion-tasks.json  # Tareas por imágenes y sus etiquetas 0/1
+│   ├── videos/                   # MP4 de tareas y explicativos
+│   ├── images/<tarea>/           # Imágenes de las tareas de Investigación
+│   ├── guias/
+│   │   ├── guias.json            # Índice de las guías
+│   │   ├── *.md                  # Contenido de cada guía
+│   │   └── img/                  # Imágenes de las guías
+│   ├── assets/logo.png
 │   └── version.json
 ├── .gitignore
 └── README.md
 ```
 
-**Nota sobre mantenimiento:** como las tres páginas son archivos HTML independientes, la barra de navegación está duplicada en cada una. Al cambiar el logo, un link del menú, o el nombre de la herramienta, hay que actualizar los tres archivos (`index.html`, `nueva-sesion.html`, `investigacion.html`), no solo uno.
+**Mantenimiento de la barra de navegación:** está duplicada en `index.html`, `nueva-sesion.html`, `investigacion.html` y `guias.html`. Al cambiar el logo, un enlace o el nombre de la herramienta, hay que actualizar los cuatro archivos.
 
-### Agregar una tarea nueva
+---
 
-Edita `docs/data/tasks.json`, no requiere tocar el código:
+## Mantener el contenido
 
-```json
-{
-  "id": "identificador_unico",
-  "title": "Nombre visible de la tarea",
-  "youtubeId": "ID_DEL_VIDEO_DE_YOUTUBE",
-  "duration": "MM:SS"
-}
-```
+### Agregar o reemplazar un video
+1. El video debe ser **MP4 con video H.264 y audio AAC** (Chrome y Edge no reproducen WMV), pesar **menos de 100 MB** (límite de GitHub por archivo) y tener el índice al inicio del archivo (*faststart*). Para dejarlo así con ffmpeg, desde Ubuntu:
+   ```bash
+   # MP4 que ya está en H.264: solo mover el índice al inicio, sin recomprimir
+   ffmpeg -i original.mp4 -c copy -movflags +faststart nuevo.mp4
+   # WMV u otro formato: convertir a MP4
+   ffmpeg -i original.wmv -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 20 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart nuevo.mp4
+   ```
+2. Guárdalo en `docs/videos/` con el nombre `tarea_idioma[_lateralidad]_tipo.mp4`, por ejemplo `muni_es_tarea.mp4` o `menv_es_zurdo_explicativo.mp4`.
+3. Pon su ruta en `docs/data/tasks.json`. La duración se lee del archivo, no hay que escribirla.
+   ```json
+   {
+     "id": "muni",
+     "title": "Tarea motora unilateral",
+     "es": { "video": "videos/muni_es_tarea.mp4", "explainerVideo": "videos/muni_es_explicativo.mp4" },
+     "en": { "video": "videos/muni_en_tarea.mp4", "explainerVideo": null }
+   }
+   ```
+   `explainerVideo: null` significa que no hay explicativo en ese idioma: la tarea se carga directamente. Las tareas con variante por lateralidad (MENV) usan `"variants": { "diestro": {...}, "zurdo": {...} }`.
+4. Sube **cada video en su versión final**: si después se reemplaza, git guarda también la versión anterior en el historial y el repo crece.
 
-> El `youtubeId` es el código después de `v=` en la URL del video (ej. en `youtube.com/watch?v=dQw4w9WgXcQ`, el ID es `dQw4w9WgXcQ`).
+### Imágenes de Investigación
+- Ruta: `docs/images/<prefijo>/<prefijo>_b<N>_<r|a><i>[_<0|1>].png`. Los bloques impares (`b1`, `b3`…) son reposo (`r`) y los pares son activación (`a`). `i` es la posición de la imagen dentro del bloque, y el sufijo `_0`/`_1` es su etiqueta. `lh` no lleva etiqueta.
+- `docs/data/investigacion-tasks.json` define cada tarea: `prefijo`, `duracionEstandarBloque` (segundos), `standardNumBlocks` (estándar clínico) y `bloques`, con los arreglos de etiquetas de `reposo` y `activacion`.
+- El sitio es estático y **no puede descubrir archivos por sí solo**: el nombre de cada imagen tiene que coincidir con lo que dice el JSON. Si falta alguna, la página lo avisa al cargar la tarea y la consola del navegador (F12) indica cuál es.
+
+### Agregar o editar una guía
+1. Escribe o edita el `.md` en `docs/guias/` (las imágenes van en `docs/guias/img/`).
+2. Si es una guía nueva, agrégala a `docs/guias/guias.json`:
+   ```json
+   { "id": "procesamiento", "grupo": "Después del estudio", "titulo": "Procesamiento fMRI",
+     "archivo": "procesamiento_fmri.md", "version": "v2", "fecha": "2026-10" }
+   ```
+3. Al cambiar el contenido de una guía, sube su `version` y su `fecha`: es lo que aparece bajo el título.
 
 ---
 
 ## Correrlo en local
 
-Este proyecto **no puede abrirse directamente con doble clic** (`file://`) por restricciones del navegador con `fetch()`. Necesitas un servidor local mínimo:
+No se puede abrir con doble clic (`file://`), porque el navegador bloquea las lecturas de archivos con `fetch()`. Necesitas un servidor local:
 
-**Opción A — VS Code + Live Server (recomendada)**
-1. Instala la extensión **Live Server**.
-2. Clic derecho sobre `docs/index.html` → **Open with Live Server**.
-3. Navega entre páginas usando los links de la barra de navegación, no editando la URL a mano.
+**Opción A: VS Code con Live Server (recomendada).** Haz clic derecho sobre `docs/index.html` y elige **Open with Live Server**.
 
-**Opción B — Terminal con Python**
+**Opción B: terminal con Python**
 ```bash
 cd docs
-python -m http.server 8000
+python3 -m http.server 8000
 ```
 Luego abre `http://localhost:8000`.
+
+En local, el navegador puede no conservar los videos descargados de una sesión a otra. En GitHub Pages sí quedan guardados.
 
 ---
 
@@ -107,15 +175,14 @@ Luego abre `http://localhost:8000`.
 
 Este repo sigue **GitHub Flow**:
 
-- `main` siempre es la versión estable y desplegable.
-- Todo cambio nuevo se hace en una rama descriptiva: `feature/lo-que-hace`.
-- Se abre un **Pull Request** hacia `main`, se revisa entre el equipo, y se fusiona.
-- La rama se borra después de fusionarse.
+- `main` siempre es la versión estable y publicada.
+- Todo cambio se hace en una rama descriptiva, `feature/lo-que-hace`, y entra a `main` por **Pull Request**.
+- Después de fusionar, la rama se puede borrar o conservar. Si se conserva, hay que ponerla al día con `main` antes de volver a usarla.
 
 ```bash
-git checkout main
+git switch main
 git pull origin main
-git checkout -b feature/nombre-descriptivo
+git switch -c feature/nombre-descriptivo
 
 # ... trabajar y hacer commits ...
 
@@ -123,28 +190,46 @@ git push -u origin feature/nombre-descriptivo
 # abrir Pull Request en GitHub hacia main
 ```
 
-### Puntos de restauración
+### Trabajar desde varios computadores
+- **Antes de editar, trae lo último** con `git pull` (o **Sync** en VS Code). Si dos computadores hacen commits sobre la misma rama sin traer los del otro, la rama diverge.
+- Configura una vez en cada computador `git config pull.rebase false`, para que `git pull` pueda mezclar ramas divergentes.
+- Revisa que el autor de los commits sea el correcto (`git config user.name` y `git config user.email`), sobre todo en equipos compartidos.
 
-Antes de fusionar cambios grandes de arquitectura, se marca el estado anterior con un tag para poder volver atrás fácilmente si algo sale mal:
+### Ver qué tiene una rama que `main` no tiene
+```bash
+git fetch origin
+git log --oneline origin/main..origin/NOMBRE-RAMA
+```
+O en GitHub: `https://github.com/fiatimago/fmri-copilot/compare/main...NOMBRE-RAMA`
+
+### Puntos de restauración
+Antes de fusionar cambios grandes, se marca el estado anterior de `main` con un tag:
 
 ```bash
-git tag nombre-descriptivo-del-punto-anterior
-git push origin nombre-descriptivo-del-punto-anterior
+git fetch origin
+git tag nombre-del-punto origin/main
+git push origin nombre-del-punto
 ```
 
 Para volver a ese punto:
 
 ```bash
-git checkout nombre-descriptivo-del-punto-anterior
-git checkout -b hotfix/restaurar
+git switch -c hotfix/restaurar nombre-del-punto
 git push -u origin hotfix/restaurar
 # abrir PR hacia main
 ```
 
-Tags existentes: `esquema-una-pagina` (estado del sitio como una sola página con vistas ocultas por JavaScript, antes de dividirlo en páginas HTML reales).
+| Tag | Estado que guarda |
+|---|---|
+| `esquema-una-pagina` | El sitio como una sola página con vistas ocultas por JavaScript, antes de dividirlo en páginas HTML reales |
+| `antes-de-controles-nativos-yt` | Antes de pasar a los controles nativos de YouTube |
+| `antes-de-idioma-en` | Antes de agregar el idioma inglés |
+| `antes-de-videos-propios` | Antes de reemplazar YouTube por videos propios |
+| `antes-de-guias` | Antes de agregar la página de guías |
+| `pre-investigacion-merge`, `v0.1.0` | Tags anteriores del repo |
 
 ---
 
 ## Autores
 
-Desarrollado por el equipo de imágenes diagnósticas para uso interno.
+Desarrollado por el equipo de imágenes diagnósticas (Fiat Imago) para uso interno.

@@ -166,7 +166,7 @@ function buildSessionReport() {
   const entries = sessionLog.map(snapshotEntry);
   const lines = [];
 
-  lines.push("REPORTE DE SESIÓN — FMRI Assistant (Nueva sesión)");
+  lines.push("REPORTE DE SESIÓN — fMRI Copilot (Nueva sesión)");
   lines.push(`Generado: ${now.toLocaleString("es-CO")}`);
   lines.push(`Página abierta desde: ${sessionStartedAt.toLocaleString("es-CO")}`);
   lines.push("");
