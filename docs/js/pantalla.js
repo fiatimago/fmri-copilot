@@ -125,6 +125,11 @@ presenterChannel.addEventListener("message", (event) => {
     case "show-blank":
       showBlank();
       break;
+    // La ventana de control pregunta si esta pantalla sigue abierta, para
+    // mostrar el indicador "conectada / no abierta".
+    case "ping":
+      presenterChannel.postMessage({ type: "pong" });
+      break;
   }
 });
 

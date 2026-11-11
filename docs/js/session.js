@@ -1,30 +1,36 @@
 // ================== ESTADO ==================
+// La secuencia es una lista de INSTANCIAS: la misma tarea puede estar varias
+// veces (ej. motor con la mano derecha y luego con la izquierda). Cada
+// instancia tiene su número de repetición, su mano (si la tarea la usa) y si
+// lleva video explicativo.
 let allTasks = [];
-let sequence = [];
-let currentTaskId = null;
-let currentSegment = "main"; // "explainer" | "main" — qué video de la tarea activa está cargado
-let currentVideoPath = null; // ruta del archivo cargado en el reproductor (ej. "videos/muni_es_tarea.mp4")
+let sequence = []; // [{ id, taskId, n, hand, explainer }] en el orden de la lista
+let currentId = null; // instancia cargada en el reproductor
+let currentSegment = "main"; // "explainer" | "main" — qué video de la instancia está cargado
+let currentVideoPath = null; // ruta del archivo cargado (ej. "videos/muni_es_tarea.mp4")
 let explainersEnabled = true;
 let handedness = "diestro";
 let language = "es";
+let nextInstanceNumber = 1; // para los id internos (s1, s2…)
+const repeatCounters = {}; // taskId → última repetición asignada (#1, #2…)
 
 // ================== DOM ==================
 const player = document.getElementById("video-player");
 
-const btnToggleTasks = document.getElementById("btn-toggle-tasks");
-const availableTasksPanel = document.getElementById("available-tasks-panel");
-const availableTasksList = document.getElementById("available-tasks-list");
+const addTaskButtons = document.getElementById("add-task-buttons");
 const sequenceList = document.getElementById("sequence-list");
 const sequenceEmptyHint = document.getElementById("sequence-empty-hint");
+const sequenceCount = document.getElementById("sequence-count");
+const sequenceTotal = document.getElementById("sequence-total-duration");
 const preloadStatus = document.getElementById("preload-status");
 
 const toggleExplainers = document.getElementById("toggle-explainers");
 const handednessButtons = document.querySelectorAll(".handedness-btn");
 const languageButtons = document.querySelectorAll(".language-btn");
+const paramsSummary = document.getElementById("params-summary");
 
-const nowPlaying = document.getElementById("now-playing");
-const currentTaskName = document.getElementById("current-task-name");
-const progressLabel = document.getElementById("progress-label");
+const nowTitle = document.getElementById("now-title");
+const nowDetail = document.getElementById("now-detail");
 
 const restScreen = document.getElementById("rest-screen");
 const btnContinueNext = document.getElementById("btn-continue-next");
@@ -35,9 +41,68 @@ const btnNextTask = document.getElementById("btn-next-task");
 const btnPauseNav = document.getElementById("btn-pause-nav");
 const btnDownloadReport = document.getElementById("btn-download-report");
 const btnOpenPresenter = document.getElementById("btn-open-presenter");
+const presenterState = document.getElementById("presenter-state");
+
+const panelGuion = document.getElementById("panel-guion");
+const guionTabs = document.querySelectorAll(".guion-tab");
+const guionBody = document.getElementById("guion-body");
+const panelActivaciones = document.getElementById("panel-activaciones");
+const activacionesBody = document.getElementById("activaciones-body");
+
+const HAND_WORD = { derecha: "Derecha", izquierda: "Izquierda" };
+const HAND_SHORT = { derecha: "Der.", izquierda: "Izq." };
 
 function isVideoPlaying() {
   return !!currentVideoPath && !player.paused && !player.ended;
+}
+
+// ================== INSTANCIAS ==================
+function taskMeta(taskId) {
+  return allTasks.find((t) => t.id === taskId) || null;
+}
+
+function instanceById(id) {
+  return sequence.find((inst) => inst.id === id) || null;
+}
+
+function currentInstance() {
+  return instanceById(currentId);
+}
+
+// "Motor unilateral #2": el número aparece cuando la tarea está más de una vez
+// o cuando ya no es la primera repetición.
+function instanceLabel(inst, short = false) {
+  const meta = taskMeta(inst.taskId);
+  const name = meta ? (short ? meta.shortTitle || meta.title : meta.title) : inst.taskId;
+  const repeated = inst.n > 1 || sequence.filter((i) => i.taskId === inst.taskId).length > 1;
+  return repeated ? `${name} #${inst.n}` : name;
+}
+
+function usesExplainer(inst) {
+  const def = resolveTaskDef(inst.taskId);
+  return explainersEnabled && inst.explainer && !!def.explainerVideo;
+}
+
+// Mano propuesta para una tarea motora nueva: la dominante primero; si ya hay
+// una con esa mano y falta la otra, la otra.
+function proposeHand(taskId) {
+  const dominant = handedness === "zurdo" ? "izquierda" : "derecha";
+  const other = dominant === "derecha" ? "izquierda" : "derecha";
+  const used = sequence.filter((i) => i.taskId === taskId).map((i) => i.hand);
+  return used.includes(dominant) && !used.includes(other) ? other : dominant;
+}
+
+function createInstance(taskId) {
+  const meta = taskMeta(taskId);
+  repeatCounters[taskId] = (repeatCounters[taskId] || 0) + 1;
+  return {
+    id: `s${nextInstanceNumber++}`,
+    taskId,
+    n: repeatCounters[taskId],
+    hand: meta && meta.manoSeleccionable ? proposeHand(taskId) : null,
+    // El explicativo va solo la primera vez que la tarea aparece en la secuencia.
+    explainer: !sequence.some((i) => i.taskId === taskId),
+  };
 }
 
 // ================== MODO PRESENTADOR (pantalla del paciente) ==================
@@ -48,6 +113,7 @@ function isVideoPlaying() {
 // archivo; ella busca la copia ya descargada en el caché del navegador.
 const presenterChannel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("fmri-sesion-presenter") : null;
 let presenterSyncInterval = null; // reenvía la posición del video cada 3s mientras suena
+let lastPresenterContact = 0; // última vez que la pantalla del paciente respondió
 
 btnOpenPresenter.addEventListener("click", () => {
   window.open("pantalla.html?canal=sesion", "fmri-pantalla-paciente-sesion", "width=1280,height=720");
@@ -71,26 +137,44 @@ function broadcastCurrentState() {
 
 if (presenterChannel) {
   presenterChannel.addEventListener("message", (event) => {
-    if (event.data && event.data.type === "request-state") broadcastCurrentState();
+    const type = event.data && event.data.type;
+    if (type === "request-state" || type === "pong") lastPresenterContact = Date.now();
+    if (type === "request-state") broadcastCurrentState();
+    if (type === "request-state" || type === "pong") updatePresenterIndicator();
   });
 }
+
+// Indicador "conectada / no abierta": se le pregunta a la pantalla del
+// paciente cada 2 s; si no responde en 5 s, se considera cerrada.
+function updatePresenterIndicator() {
+  const connected = Date.now() - lastPresenterContact < 5000;
+  presenterState.textContent = connected ? "conectada" : "no abierta";
+  presenterState.classList.toggle("on", connected);
+}
+setInterval(() => {
+  postToPresenter({ type: "ping" });
+  updatePresenterIndicator();
+}, 2000);
+updatePresenterIndicator();
 
 // ================== REGISTRO DE LO QUE REALMENTE SE REPRODUJO ==================
 // Cada video que llega a sonar (explicativo o tarea) genera una entrada con
 // hora de inicio/fin, tiempo efectivo reproduciéndose (sin contar pausas),
 // número de pausas y si terminó completo o se interrumpió (se cambió de
-// tarea, se recargó por idioma/lateralidad, etc.). El idioma y la
-// lateralidad se guardan por entrada porque pueden cambiar a mitad de sesión.
+// tarea, se recargó por idioma/lateralidad, etc.). Idioma, lateralidad y mano
+// se guardan por entrada porque pueden cambiar a mitad de sesión.
 const sessionLog = [];
 let currentLogEntry = null;
 const sessionStartedAt = new Date();
 
 function openLogEntry() {
-  const def = resolveTaskDef(currentTaskId);
+  const inst = currentInstance();
   const now = Date.now();
   currentLogEntry = {
-    taskId: currentTaskId,
-    title: def ? def.title : currentTaskId,
+    instanceId: inst.id,
+    taskId: inst.taskId,
+    label: instanceLabel(inst),
+    hand: inst.hand,
     segment: currentSegment, // "explainer" | "main"
     file: currentVideoPath,
     language,
@@ -132,6 +216,10 @@ function closeLogEntry(completed) {
   currentLogEntry = null;
 }
 
+function isInstanceCompleted(inst) {
+  return sessionLog.some((e) => e.instanceId === inst.id && e.segment === "main" && e.completed);
+}
+
 // ================== REPORTE DE LA SESIÓN ==================
 function msToClock(ms) {
   return secondsToDuration(Math.round(ms / 1000));
@@ -142,7 +230,7 @@ function timeOfDay(ts) {
 }
 
 const LANG_LABEL = { es: "Español", en: "English" };
-const HAND_LABEL = { diestro: "Diestro", zurdo: "Zurdo" };
+const HANDEDNESS_LABEL = { diestro: "Diestro", zurdo: "Zurdo" };
 const SEGMENT_LABEL = { explainer: "Video explicativo", main: "Tarea" };
 
 // Copia de la entrada con los tiempos "hasta ahora" si el video sigue abierto.
@@ -161,6 +249,8 @@ function fileName(path) {
   return path ? path.split("/").pop() : "—";
 }
 
+const handText = (hand) => (hand ? ` · mano ${hand}` : "");
+
 function buildSessionReport() {
   const now = new Date();
   const entries = sessionLog.map(snapshotEntry);
@@ -173,7 +263,7 @@ function buildSessionReport() {
   lines.push("Configuración al momento del reporte:");
   lines.push(`  Videos explicativos: ${explainersEnabled ? "activados" : "desactivados"}`);
   lines.push(`  Idioma: ${LANG_LABEL[language]}`);
-  lines.push(`  Lateralidad: ${HAND_LABEL[handedness]} (solo cambia el video de MENV)`);
+  lines.push(`  Lateralidad: ${HANDEDNESS_LABEL[handedness]} (solo cambia el video de MENV)`);
   lines.push("");
 
   // ---- Secuencia planeada ----
@@ -181,16 +271,12 @@ function buildSessionReport() {
   lines.push("SECUENCIA PLANEADA (orden actual en la lista)");
   lines.push("=".repeat(70));
   if (sequence.length === 0) lines.push("  (vacía)");
-  sequence.forEach((taskId, i) => {
-    const def = resolveTaskDef(taskId);
-    const taskSec = VideoDurations.get(def.video);
+  sequence.forEach((inst, i) => {
+    const def = resolveTaskDef(inst.taskId);
     let explainerText = "sin explicativo";
-    if (explainersEnabled) {
-      explainerText = def.explainerVideo
-        ? `explicativo ${formatDuration(VideoDurations.get(def.explainerVideo))}`
-        : "explicativo no disponible en este idioma";
-    }
-    lines.push(`  ${i + 1}. ${def.title} (${taskId}) — tarea ${formatDuration(taskSec)} | ${explainerText}`);
+    if (usesExplainer(inst)) explainerText = `explicativo ${formatDuration(VideoDurations.get(def.explainerVideo))}`;
+    else if (explainersEnabled && inst.explainer && !def.explainerVideo) explainerText = "explicativo no disponible en este idioma";
+    lines.push(`  ${i + 1}. ${instanceLabel(inst)} (${inst.taskId})${handText(inst.hand)} — tarea ${formatDuration(VideoDurations.get(def.video))} | ${explainerText}`);
   });
   if (sequence.length > 0) lines.push(`  Duración total estimada: ${formatDuration(computeSequenceTotalSeconds())}`);
   lines.push("");
@@ -204,8 +290,8 @@ function buildSessionReport() {
   if (entries.length === 0) lines.push("  (no se reprodujo ningún video)");
   entries.forEach((s, i) => {
     const end = s.open ? "…" : timeOfDay(s.endedAt);
-    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.title} (${s.taskId}) — ${SEGMENT_LABEL[s.segment]}`);
-    lines.push(`   Idioma: ${LANG_LABEL[s.language]} | Lateralidad: ${HAND_LABEL[s.handedness]} | Archivo: ${fileName(s.file)}`);
+    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.label} (${s.taskId})${handText(s.hand)} — ${SEGMENT_LABEL[s.segment]}`);
+    lines.push(`   Idioma: ${LANG_LABEL[s.language]} | Lateralidad: ${HANDEDNESS_LABEL[s.handedness]} | Archivo: ${fileName(s.file)}`);
     lines.push(
       `   Duración del video: ${s.videoDurationS ? msToClock(s.videoDurationS * 1000) : "—"} | ` +
       `Reproducido: ${msToClock(s.playedMs)} | Total: ${msToClock(s.wallMs)} | Pausas: ${s.pauses}`
@@ -214,24 +300,27 @@ function buildSessionReport() {
     lines.push("");
   });
 
-  // ---- Resumen por tarea ----
+  // ---- Resumen por tarea de la secuencia (cada repetición por separado) ----
   lines.push("=".repeat(70));
   lines.push("RESUMEN POR TAREA");
   lines.push("=".repeat(70));
-  const taskIds = [...new Set([...sequence, ...entries.map((s) => s.taskId)])];
-  if (taskIds.length === 0) lines.push("  (sin tareas)");
-  taskIds.forEach((taskId) => {
-    const def = resolveTaskDef(taskId);
-    const ofTask = entries.filter((s) => s.taskId === taskId);
+  const instanceIds = [...new Set([...sequence.map((i) => i.id), ...entries.map((s) => s.instanceId)])];
+  if (instanceIds.length === 0) lines.push("  (sin tareas)");
+  instanceIds.forEach((id) => {
+    const inSeq = instanceById(id);
+    const ofInst = entries.filter((s) => s.instanceId === id);
+    const label = inSeq ? instanceLabel(inSeq) : ofInst[0].label;
+    const taskId = inSeq ? inSeq.taskId : ofInst[0].taskId;
+    const hand = inSeq ? inSeq.hand : ofInst[0].hand;
     const describe = (segment) => {
-      const list = ofTask.filter((s) => s.segment === segment);
+      const list = ofInst.filter((s) => s.segment === segment);
       if (list.length === 0) return segment === "explainer" ? "no se mostró" : "no se reprodujo";
       const played = list.reduce((sum, s) => sum + s.playedMs, 0);
       const anyCompleted = list.some((s) => s.completed);
       const times = list.length > 1 ? ` (${list.length} veces)` : "";
       return `${anyCompleted ? "completo" : "incompleto"}${times}, reproducido ${msToClock(played)}`;
     };
-    lines.push(`- ${def ? def.title : taskId} (${taskId})${sequence.includes(taskId) ? "" : " — ya no está en la secuencia"}`);
+    lines.push(`- ${label} (${taskId})${handText(hand)}${inSeq ? "" : " — ya no está en la secuencia"}`);
     lines.push(`    Explicativo: ${describe("explainer")}`);
     lines.push(`    Tarea:       ${describe("main")}`);
   });
@@ -278,11 +367,13 @@ function formatDuration(seconds) {
   return seconds > 0 ? secondsToDuration(Math.round(seconds)) : "…";
 }
 
+const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 // Devuelve título y rutas de video/explicativo de una tarea, resolviendo
 // lateralidad (ej. MENV) e idioma. explainerVideo es null si no existe en
 // ese idioma (hoy: inglés).
 function resolveTaskDef(taskId) {
-  const task = allTasks.find((t) => t.id === taskId);
+  const task = taskMeta(taskId);
   if (!task) return null;
 
   const base = task.variants ? (task.variants[handedness] || task.variants.diestro) : task;
@@ -295,97 +386,100 @@ function resolveTaskDef(taskId) {
   };
 }
 
-function hasExplainer(def) {
-  return explainersEnabled && !!def.explainerVideo;
+function instanceSeconds(inst) {
+  const def = resolveTaskDef(inst.taskId);
+  return VideoDurations.get(def.video) + (usesExplainer(inst) ? VideoDurations.get(def.explainerVideo) : 0);
 }
 
-function taskTotalSeconds(def) {
-  return VideoDurations.get(def.video) + (hasExplainer(def) ? VideoDurations.get(def.explainerVideo) : 0);
-}
-
-function getDisplayDuration(def) {
+function instanceDurationText(inst) {
+  const def = resolveTaskDef(inst.taskId);
   const taskSec = VideoDurations.get(def.video);
-  const explainerSec = hasExplainer(def) ? VideoDurations.get(def.explainerVideo) : 0;
-  const known = taskSec > 0 && (!hasExplainer(def) || explainerSec > 0);
+  const explainerSec = usesExplainer(inst) ? VideoDurations.get(def.explainerVideo) : 0;
+  const known = taskSec > 0 && (!usesExplainer(inst) || explainerSec > 0);
   return {
     text: known ? formatDuration(taskSec + explainerSec) : "…",
-    tooltip: hasExplainer(def) ? `${formatDuration(explainerSec)} explicativo + ${formatDuration(taskSec)} tarea` : "",
+    tooltip: usesExplainer(inst) ? `${formatDuration(explainerSec)} explicativo + ${formatDuration(taskSec)} tarea` : "",
   };
 }
 
 function computeSequenceTotalSeconds() {
-  return sequence.reduce((total, taskId) => total + taskTotalSeconds(resolveTaskDef(taskId)), 0);
+  return sequence.reduce((total, inst) => total + instanceSeconds(inst), 0);
 }
 
 function updateSequenceTotalLabel() {
-  const el = document.getElementById("sequence-total-duration");
-  if (!el) return;
-  if (sequence.length === 0) {
-    el.textContent = "";
-    return;
-  }
-  el.innerHTML = `Duración total estimada: <strong>${formatDuration(computeSequenceTotalSeconds())}</strong>`;
+  sequenceCount.textContent = sequence.length ? `(${sequence.length})` : "";
+  sequenceTotal.innerHTML = sequence.length
+    ? `Total <strong>${formatDuration(computeSequenceTotalSeconds())}</strong>`
+    : "";
 }
 
 // Lee la duración real de los videos del idioma/lateralidad actuales y
-// refresca las listas cuando las tiene.
+// refresca la lista cuando las tiene.
 function probeAllDurations() {
-  const srcs = [];
   allTasks.forEach((task) => {
     const def = resolveTaskDef(task.id);
-    srcs.push(def.video);
-    if (def.explainerVideo) srcs.push(def.explainerVideo);
+    [def.video, def.explainerVideo].filter(Boolean).forEach((src) =>
+      VideoDurations.probe(src).then(() => {
+        refreshSequenceDurations();
+        updateSequenceTotalLabel();
+      })
+    );
   });
-  srcs.forEach((src) =>
-    VideoDurations.probe(src).then(() => {
-      refreshAllDurations();
-      updateSequenceTotalLabel();
-    })
-  );
 }
 
 // ================== DESCARGA PREVIA DE LOS VIDEOS ==================
-// Todo lo que está en la secuencia (y su explicativo, si están activados)
-// se descarga completo en segundo plano, en el orden de la secuencia.
-function videosNeededFor(taskId) {
-  const def = resolveTaskDef(taskId);
+// Todo lo que está en la secuencia (y su explicativo, si lo lleva) se
+// descarga completo en segundo plano, en el orden de la secuencia. Un video
+// repetido se descarga una sola vez.
+function videosNeededFor(inst) {
+  const def = resolveTaskDef(inst.taskId);
   const srcs = [];
-  if (hasExplainer(def)) srcs.push(def.explainerVideo);
+  if (usesExplainer(inst)) srcs.push(def.explainerVideo);
   srcs.push(def.video);
   return srcs;
 }
 
 async function preloadSequence() {
-  for (const taskId of [...sequence]) {
-    for (const src of videosNeededFor(taskId)) {
+  for (const inst of [...sequence]) {
+    for (const src of videosNeededFor(inst)) {
       await VideoCache.preload(src);
     }
   }
 }
 
-function taskPreloadText(taskId) {
-  const states = videosNeededFor(taskId).map((src) => VideoCache.getState(src));
-  if (states.some((s) => s && s.status === "error")) return "⚠ no se pudo descargar, se usará internet";
-  if (states.every((s) => s && s.status === "ready")) return "✓ listo sin conexión";
+// "ready" | "error" | "downloading" | "waiting", y el progreso si descarga.
+function instancePreloadState(inst) {
+  const states = videosNeededFor(inst).map((src) => VideoCache.getState(src));
+  if (states.some((s) => s && s.status === "error")) return { state: "error" };
+  if (states.every((s) => s && s.status === "ready")) return { state: "ready" };
   const downloading = states.find((s) => s && s.status === "downloading");
-  if (downloading) return `descargando… ${Math.round(downloading.progress * 100)}%`;
-  return "en espera de descarga";
+  if (downloading) return { state: "downloading", progress: downloading.progress };
+  return { state: "waiting" };
 }
 
+const PRELOAD_TEXT = {
+  ready: "✓ sin conexión",
+  error: "⚠ se usará internet",
+  waiting: "en espera",
+};
+
 function refreshPreloadStatus() {
-  sequence.forEach((taskId) => {
-    const small = sequenceList.querySelector(`.sequence-item[data-task-id="${taskId}"] .preload-state`);
-    if (small) small.textContent = taskPreloadText(taskId);
+  sequence.forEach((inst) => {
+    const el = sequenceList.querySelector(`.sequence-item[data-instance-id="${inst.id}"] .preload-state`);
+    if (!el) return;
+    const st = instancePreloadState(inst);
+    el.textContent = st.state === "downloading" ? `⏳ ${Math.round(st.progress * 100)}%` : PRELOAD_TEXT[st.state];
+    el.dataset.state = st.state;
   });
   if (sequence.length === 0) {
     preloadStatus.textContent = "";
     return;
   }
-  const all = sequence.flatMap(videosNeededFor);
+  const all = [...new Set(sequence.flatMap(videosNeededFor))];
   const ready = all.filter((src) => VideoCache.getState(src)?.status === "ready").length;
   preloadStatus.textContent = ready === all.length
     ? "✓ Todos los videos de la secuencia están descargados."
-    : `Descargando videos de la secuencia: ${ready}/${all.length} listos.`;
+    : `Descargando videos: ${ready}/${all.length} listos.`;
 }
 
 VideoCache.onChange((src, state) => {
@@ -401,36 +495,50 @@ VideoCache.onChange((src, state) => {
   }
 });
 
-// ================== CATÁLOGO DE TAREAS ==================
+// ================== CATÁLOGO DE TAREAS Y GUION ==================
 fetch("data/tasks.json")
   .then((r) => r.json())
   .then((data) => {
     allTasks = data.tasks;
-    renderAvailableTasks();
+    renderAddButtons();
     probeAllDurations();
+    renderGuion();
   })
   .catch((err) => {
-    availableTasksList.innerHTML = "<li>⚠ No se pudo cargar el catálogo de tareas.</li>";
+    addTaskButtons.innerHTML = '<p class="hint">⚠ No se pudo cargar el catálogo de tareas.</p>';
     console.error("Error cargando tasks.json:", err);
   });
 
-// ================== MOSTRAR / OCULTAR TAREAS DISPONIBLES ==================
-btnToggleTasks.addEventListener("click", () => {
-  const isHidden = availableTasksPanel.hidden;
-  availableTasksPanel.hidden = !isHidden;
-  btnToggleTasks.textContent = isHidden ? "Ocultar tareas disponibles" : "Mostrar tareas disponibles";
+Guion.load().then(renderGuion);
+
+// ================== PANELES PLEGABLES ==================
+// Cada panel recuerda si quedó abierto o plegado (solo en este navegador).
+document.querySelectorAll("details[data-remember]").forEach((panel) => {
+  const key = `ns-panel-${panel.id}`;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) panel.open = saved === "1";
+  } catch (err) { /* sin almacenamiento: se usa el estado por defecto */ }
+  panel.addEventListener("toggle", () => {
+    try { localStorage.setItem(key, panel.open ? "1" : "0"); } catch (err) { /* ignorar */ }
+  });
 });
 
 // ================== AJUSTES: EXPLICATIVOS / LATERALIDAD / IDIOMA ==================
 // Cualquier cambio vuelve a calcular duraciones, descarga lo que falte y
 // recarga la tarea actual si está en pausa (nunca interrumpe una que suena).
+function updateParamsSummary() {
+  paramsSummary.textContent =
+    `${language.toUpperCase()} · ${HANDEDNESS_LABEL[handedness]} · Explicativos ${explainersEnabled ? "✓" : "✗"}`;
+}
+
 function onSettingsChanged() {
+  updateParamsSummary();
   probeAllDurations();
-  refreshAllDurations();
-  updateSequenceTotalLabel();
+  renderSequence();
   preloadSequence();
-  refreshPreloadStatus();
-  if (currentTaskId && !isTaskCurrentlyPlaying(currentTaskId)) loadTask(currentTaskId);
+  renderGuion();
+  if (currentId && !isInstanceCurrentlyPlaying(currentId)) loadInstance(currentId);
 }
 
 toggleExplainers.addEventListener("change", () => {
@@ -442,6 +550,7 @@ handednessButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     handedness = btn.dataset.hand;
     handednessButtons.forEach((b) => b.classList.toggle("active", b === btn));
+    btn.blur();
     onSettingsChanged();
   });
 });
@@ -450,123 +559,170 @@ languageButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     language = btn.dataset.lang;
     languageButtons.forEach((b) => b.classList.toggle("active", b === btn));
+    btn.blur();
     onSettingsChanged();
   });
 });
 
-// Actualiza la duración mostrada de TODAS las tareas en ambas listas.
-function refreshAllDurations() {
+updateParamsSummary();
+
+// ================== BOTONES PARA AGREGAR TAREAS ==================
+function renderAddButtons() {
+  addTaskButtons.innerHTML = "";
   allTasks.forEach((task) => {
-    const display = getDisplayDuration(resolveTaskDef(task.id));
-    const selectors = [
-      `#available-tasks-list li[data-task-id="${task.id}"] .task-duration`,
-      `#sequence-list .sequence-item[data-task-id="${task.id}"] .task-duration`,
-    ];
-    selectors.forEach((sel) => {
-      const el = document.querySelector(sel);
-      if (el) {
-        el.textContent = display.text;
-        el.title = display.tooltip;
-      }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "add-task-btn";
+    btn.draggable = true;
+    btn.dataset.taskId = task.id;
+    btn.title = `Agregar «${task.title}» a la secuencia (se puede repetir)`;
+    btn.textContent = `+ ${task.shortTitle || task.title}`;
+    btn.addEventListener("click", () => {
+      addInstance(task.id);
+      btn.blur();
     });
-  });
-}
-
-// ================== LISTA DE TAREAS DISPONIBLES ==================
-function renderAvailableTasks() {
-  availableTasksList.innerHTML = "";
-  allTasks.forEach((task) => {
-    const def = resolveTaskDef(task.id);
-    const display = getDisplayDuration(def);
-
-    const li = document.createElement("li");
-    li.draggable = true;
-    li.dataset.taskId = task.id;
-    li.innerHTML = `
-      <span class="task-title">${def.title}</span>
-      <span class="task-duration" title="${display.tooltip}">${display.text}</span>
-      <button class="task-action-btn btn-add" type="button" title="Agregar a la secuencia">+</button>
-    `;
-
-    li.addEventListener("dragstart", (e) => {
-      if (sequence.includes(task.id)) { e.preventDefault(); return; }
+    btn.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "new", taskId: task.id }));
     });
-
-    li.querySelector(".task-action-btn").addEventListener("click", () => addTaskToSequence(task.id));
-
-    availableTasksList.appendChild(li);
-  });
-  refreshAvailableTasksState();
-}
-
-function refreshAvailableTasksState() {
-  [...availableTasksList.children].forEach((li) => {
-    const inSequence = sequence.includes(li.dataset.taskId);
-    li.hidden = inSequence;
-    li.draggable = !inSequence;
+    addTaskButtons.appendChild(btn);
   });
 }
 
-// ================== AGREGAR / QUITAR DE LA SECUENCIA ==================
-function addTaskToSequence(taskId) {
-  if (sequence.includes(taskId)) return;
-  sequenceList.appendChild(createSequenceItem(taskId));
-  syncSequenceFromDOM();
+// ================== AGREGAR / QUITAR / EDITAR INSTANCIAS ==================
+function addInstance(taskId, beforeId = null) {
+  const inst = createInstance(taskId);
+  const at = beforeId ? sequence.findIndex((i) => i.id === beforeId) : -1;
+  if (at >= 0) sequence.splice(at, 0, inst);
+  else sequence.push(inst);
+  onSequenceChanged();
 }
 
-function removeTaskFromSequence(taskId) {
-  if (isTaskCurrentlyPlaying(taskId)) return;
-  const li = sequenceList.querySelector(`.sequence-item[data-task-id="${taskId}"]`);
-  if (li) li.remove();
-  syncSequenceFromDOM();
+function removeInstance(id) {
+  if (isInstanceCurrentlyPlaying(id)) return;
+  sequence = sequence.filter((i) => i.id !== id);
+  onSequenceChanged();
 }
 
-// ================== SECUENCIA (drag & drop + botones) ==================
-function createSequenceItem(taskId) {
-  const def = resolveTaskDef(taskId);
-  const display = getDisplayDuration(def);
-
-  const li = document.createElement("li");
-  li.className = "sequence-item";
-  li.draggable = true;
-  li.dataset.taskId = taskId;
-  li.innerHTML = `
-    <span class="drag-handle">⠿</span>
-    <span class="task-title">${def.title}<small class="preload-state"></small></span>
-    <span class="task-duration" title="${display.tooltip}">${display.text}</span>
-    <div class="move-buttons">
-      <button class="btn-move btn-move-up" type="button" title="Subir">▲</button>
-      <button class="btn-move btn-move-down" type="button" title="Bajar">▼</button>
-    </div>
-    <button class="task-action-btn btn-remove" type="button" title="Quitar">✕</button>
-  `;
-
-  li.addEventListener("dragstart", (e) => {
-    if (isTaskCurrentlyPlaying(taskId)) { e.preventDefault(); return; }
-    li.classList.add("dragging");
-    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "move" }));
-  });
-  li.addEventListener("dragend", () => {
-    li.classList.remove("dragging");
-    syncSequenceFromDOM();
-  });
-
-  li.querySelector(".btn-move-up").addEventListener("click", () => moveSequenceItem(li, -1));
-  li.querySelector(".btn-move-down").addEventListener("click", () => moveSequenceItem(li, 1));
-  li.querySelector(".task-action-btn").addEventListener("click", () => removeTaskFromSequence(taskId));
-
-  return li;
+function moveInstance(id, direction) {
+  if (isInstanceCurrentlyPlaying(id)) return;
+  const i = sequence.findIndex((inst) => inst.id === id);
+  const j = i + direction;
+  if (i < 0 || j < 0 || j >= sequence.length) return;
+  [sequence[i], sequence[j]] = [sequence[j], sequence[i]];
+  onSequenceChanged();
 }
 
-function moveSequenceItem(li, direction) {
-  if (isTaskCurrentlyPlaying(li.dataset.taskId)) return;
-  if (direction === -1 && li.previousElementSibling) {
-    sequenceList.insertBefore(li, li.previousElementSibling);
-  } else if (direction === 1 && li.nextElementSibling) {
-    sequenceList.insertBefore(li.nextElementSibling, li);
+function setInstanceHand(id, hand) {
+  const inst = instanceById(id);
+  if (!inst || isInstanceCurrentlyPlaying(id)) return;
+  inst.hand = hand;
+  renderSequence();
+  if (id === currentId) {
+    updateNowBar();
+    renderGuion();
   }
-  syncSequenceFromDOM();
+}
+
+function toggleInstanceExplainer(id) {
+  const inst = instanceById(id);
+  if (!inst || isInstanceCurrentlyPlaying(id)) return;
+  inst.explainer = !inst.explainer;
+  renderSequence();
+  updateSequenceTotalLabel();
+  preloadSequence();
+  if (id === currentId) loadInstance(id);
+}
+
+// ================== SECUENCIA: DIBUJO, ORDEN Y ARRASTRE ==================
+function renderSequence() {
+  sequenceList.innerHTML = "";
+  sequence.forEach((inst, index) => {
+    const meta = taskMeta(inst.taskId);
+    const def = resolveTaskDef(inst.taskId);
+    const locked = isInstanceCurrentlyPlaying(inst.id);
+    const isCurrent = inst.id === currentId;
+    const done = isInstanceCompleted(inst);
+    const dur = instanceDurationText(inst);
+
+    const li = document.createElement("li");
+    li.className = "sequence-item";
+    li.classList.toggle("current", isCurrent);
+    li.classList.toggle("done", done);
+    li.classList.toggle("locked", locked);
+    li.draggable = !locked;
+    li.dataset.instanceId = inst.id;
+
+    const status = isCurrent ? "▶" : done ? "✓" : "";
+    const statusTitle = isCurrent ? "Tarea cargada" : done ? "Completada" : "";
+
+    let handHtml = "";
+    if (meta && meta.manoSeleccionable) {
+      handHtml = `<span class="hand-toggle" title="Mano con la que se hace la tarea">${
+        ["derecha", "izquierda"].map((h) =>
+          `<button type="button" class="hand-btn${inst.hand === h ? " active" : ""}" data-hand="${h}"${locked ? " disabled" : ""}>${HAND_SHORT[h]}</button>`
+        ).join("")}</span>`;
+    }
+
+    let explainerHtml = "";
+    if (explainersEnabled && def.explainerVideo) {
+      explainerHtml = `<button type="button" class="expl-toggle${inst.explainer ? " on" : ""}"${locked ? " disabled" : ""}
+        title="${inst.explainer ? "Con video explicativo (clic para quitarlo)" : "Sin video explicativo (clic para agregarlo)"}">🎬</button>`;
+    }
+
+    li.innerHTML = `
+      <span class="seq-status" title="${statusTitle}">${status}</span>
+      <span class="drag-handle">⠿</span>
+      <div class="seq-main">
+        <div class="seq-title">${index + 1}. ${escapeHtml(instanceLabel(inst, true))}</div>
+        <div class="seq-meta">${handHtml}${explainerHtml}<small class="preload-state"></small></div>
+      </div>
+      <span class="task-duration" title="${dur.tooltip}">${dur.text}</span>
+      <div class="move-buttons">
+        <button class="btn-move btn-move-up" type="button" title="Subir"${locked || index === 0 ? " disabled" : ""}>▲</button>
+        <button class="btn-move btn-move-down" type="button" title="Bajar"${locked || index === sequence.length - 1 ? " disabled" : ""}>▼</button>
+      </div>
+      <button class="task-action-btn btn-remove" type="button" title="Quitar"${locked ? " disabled" : ""}>✕</button>
+    `;
+
+    li.querySelector(".btn-move-up").addEventListener("click", () => moveInstance(inst.id, -1));
+    li.querySelector(".btn-move-down").addEventListener("click", () => moveInstance(inst.id, 1));
+    li.querySelector(".btn-remove").addEventListener("click", () => removeInstance(inst.id));
+    li.querySelectorAll(".hand-btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        setInstanceHand(inst.id, b.dataset.hand);
+        b.blur();
+      })
+    );
+    const expl = li.querySelector(".expl-toggle");
+    if (expl) expl.addEventListener("click", () => toggleInstanceExplainer(inst.id));
+
+    li.addEventListener("dragstart", (e) => {
+      if (isInstanceCurrentlyPlaying(inst.id)) { e.preventDefault(); return; }
+      li.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "move", id: inst.id }));
+    });
+    li.addEventListener("dragend", () => {
+      li.classList.remove("dragging");
+      const order = [...sequenceList.querySelectorAll(".sequence-item")].map((el) => el.dataset.instanceId);
+      sequence.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      onSequenceChanged();
+    });
+
+    sequenceList.appendChild(li);
+  });
+  sequenceEmptyHint.hidden = sequence.length > 0;
+  refreshPreloadStatus();
+  updateSequenceTotalLabel();
+}
+
+function refreshSequenceDurations() {
+  sequence.forEach((inst) => {
+    const el = sequenceList.querySelector(`.sequence-item[data-instance-id="${inst.id}"] .task-duration`);
+    if (!el) return;
+    const dur = instanceDurationText(inst);
+    el.textContent = dur.text;
+    el.title = dur.tooltip;
+  });
 }
 
 function getDragAfterElement(container, y) {
@@ -595,30 +751,20 @@ sequenceList.addEventListener("drop", (e) => {
   e.preventDefault();
   let data;
   try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
-
   if (data.type === "new") {
-    if (sequence.includes(data.taskId)) return;
-    const li = createSequenceItem(data.taskId);
     const afterElement = getDragAfterElement(sequenceList, e.clientY);
-    afterElement ? sequenceList.insertBefore(li, afterElement) : sequenceList.appendChild(li);
-    syncSequenceFromDOM();
-  } else if (data.type === "move") {
-    syncSequenceFromDOM();
+    addInstance(data.taskId, afterElement ? afterElement.dataset.instanceId : null);
   }
+  // "move": el nuevo orden se toma en dragend.
 });
 
 // Se llama siempre que la secuencia cambia: agregar, quitar o reordenar.
-function syncSequenceFromDOM() {
-  sequence = [...sequenceList.querySelectorAll(".sequence-item")].map((li) => li.dataset.taskId);
-  sequenceEmptyHint.hidden = sequence.length > 0;
+function onSequenceChanged() {
   btnDownloadReport.disabled = sequence.length === 0 && sessionLog.length === 0;
-  refreshAvailableTasksState();
   preloadSequence();
-  refreshPreloadStatus();
 
   if (sequence.length === 0) {
-    currentTaskId = null;
-    nowPlaying.hidden = true;
+    currentId = null;
     restScreen.hidden = true;
     btnPrevTask.disabled = true;
     btnNextTask.disabled = true;
@@ -626,36 +772,80 @@ function syncSequenceFromDOM() {
     unloadVideo();
     clearInterval(presenterSyncInterval);
     postToPresenter({ type: "show-blank" });
+    renderSequence();
+    updateNowBar();
     updatePauseButtonState();
-    updateSequenceTotalLabel();
+    renderGuion();
     return;
   }
 
-  if (!currentTaskId || !sequence.includes(currentTaskId)) {
-    loadTask(sequence[0]);
-  } else {
-    updateNowPlayingLabel();
-    updateNavButtonsState();
+  if (!currentId || !instanceById(currentId)) {
+    loadInstance(sequence[0].id);
+    return;
   }
-  updateSequenceUI();
-  updateSequenceTotalLabel();
+  renderSequence();
+  updateNowBar();
+  updateNavButtonsState();
 }
 
-function isTaskCurrentlyPlaying(taskId) {
-  return taskId === currentTaskId && isVideoPlaying();
+function isInstanceCurrentlyPlaying(id) {
+  return id === currentId && isVideoPlaying();
 }
 
-function updateSequenceUI() {
-  const items = [...sequenceList.querySelectorAll(".sequence-item")];
-  items.forEach((li, index) => {
-    const locked = isTaskCurrentlyPlaying(li.dataset.taskId);
-    li.draggable = !locked;
-    li.classList.toggle("locked", locked);
-    li.querySelector(".btn-move-up").disabled = locked || index === 0;
-    li.querySelector(".btn-move-down").disabled = locked || index === items.length - 1;
-    li.querySelector(".task-action-btn").disabled = locked;
+// ================== BARRA "AHORA" ==================
+function updateNowBar() {
+  const inst = currentInstance();
+  if (!inst) {
+    nowTitle.textContent = "Agrega una tarea para empezar";
+    nowDetail.textContent = "";
+    return;
+  }
+  const index = sequence.indexOf(inst);
+  const parts = [];
+  if (inst.hand) parts.push(`mano ${inst.hand.toUpperCase()}`);
+  parts.push(currentSegment === "explainer" ? "Video explicativo" : "Tarea");
+  parts.push(`(${index + 1}/${sequence.length})`);
+  nowTitle.textContent = instanceLabel(inst);
+  nowDetail.textContent = parts.join(" · ");
+}
+
+// ================== GUION ==================
+// Pestañas "Entrevista" y "Tarea actual". El texto sale de la guía de
+// entrevista (ver guion.js). No hay guion en inglés: en English el panel se oculta.
+let guionTab = "entrevista";
+
+guionTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    guionTab = tab.dataset.tab;
+    tab.blur();
+    renderGuion();
   });
-  refreshAvailableTasksState();
+});
+
+function renderGuion() {
+  panelGuion.hidden = language !== "es";
+  if (panelGuion.hidden) return;
+
+  guionTabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === guionTab));
+
+  if (guionTab === "entrevista") {
+    guionBody.innerHTML = Guion.entrevista().html;
+    panelActivaciones.hidden = true;
+    return;
+  }
+
+  const inst = currentInstance();
+  if (!inst) {
+    guionBody.innerHTML = '<p class="hint">Agrega una tarea a la secuencia para ver su guion.</p>';
+    panelActivaciones.hidden = true;
+    return;
+  }
+  const meta = taskMeta(inst.taskId);
+  const g = Guion.forTask(meta && meta.guion, { handedness, hand: inst.hand });
+  const heading = `${escapeHtml(instanceLabel(inst))}${inst.hand ? ` · mano ${HAND_WORD[inst.hand].toLowerCase()}` : ""}`;
+  guionBody.innerHTML = `<h4 class="guion-heading">${heading}</h4>${g.html}`;
+  activacionesBody.innerHTML = g.activacionesHtml;
+  panelActivaciones.hidden = !g.activacionesHtml;
 }
 
 // ================== REPRODUCTOR ==================
@@ -674,56 +864,57 @@ function unloadVideo() {
   player.load();
 }
 
-// ================== CARGA DE TAREAS (con o sin explicativo) ==================
-function loadTask(taskId) {
+// ================== CARGA DE UNA INSTANCIA (con o sin explicativo) ==================
+function loadInstance(id) {
   closeLogEntry(false); // si algo estaba a medias, queda registrado como interrumpido
-  currentTaskId = taskId;
+  const changed = id !== currentId;
+  currentId = id;
   restScreen.hidden = true;
   btnStartTask.hidden = true;
-  const def = resolveTaskDef(taskId);
+  const inst = currentInstance();
+  const def = resolveTaskDef(inst.taskId);
 
-  currentSegment = hasExplainer(def) ? "explainer" : "main";
+  currentSegment = usesExplainer(inst) ? "explainer" : "main";
   setVideo(currentSegment === "explainer" ? def.explainerVideo : def.video);
 
   clearInterval(presenterSyncInterval);
   postToPresenter({ type: "show-video", src: currentVideoPath });
-  updateNowPlayingLabel();
-  updateNavButtonsState();
-  updateSequenceUI();
-  updatePauseButtonState();
-}
 
-function updateNowPlayingLabel() {
-  const index = sequence.indexOf(currentTaskId);
-  const def = resolveTaskDef(currentTaskId);
-  const suffix = currentSegment === "explainer" ? " — video explicativo" : "";
-  currentTaskName.textContent = def ? def.title + suffix : "—";
-  progressLabel.textContent = `(${index + 1}/${sequence.length})`;
-  nowPlaying.hidden = false;
+  // Ya en plena sesión, al cambiar de tarea el guion salta a "Tarea actual".
+  if (changed && sessionLog.length > 0) guionTab = "tarea";
+
+  renderSequence();
+  updateNowBar();
+  updateNavButtonsState();
+  updatePauseButtonState();
+  renderGuion();
 }
 
 function updateNavButtonsState() {
-  const index = sequence.indexOf(currentTaskId);
+  const index = sequence.findIndex((i) => i.id === currentId);
   btnPrevTask.disabled = index <= 0;
   btnNextTask.disabled = index === -1 || index >= sequence.length - 1;
 }
 
 // ================== NAVEGAR ENTRE TAREAS ==================
+function loadRelative(offset) {
+  const index = sequence.findIndex((i) => i.id === currentId);
+  const target = sequence[index + offset];
+  if (index !== -1 && target) loadInstance(target.id);
+}
+
 btnPrevTask.addEventListener("click", () => {
-  const index = sequence.indexOf(currentTaskId);
-  if (index > 0) loadTask(sequence[index - 1]);
+  loadRelative(-1);
   btnPrevTask.blur();
 });
 
 btnNextTask.addEventListener("click", () => {
-  const index = sequence.indexOf(currentTaskId);
-  if (index !== -1 && index < sequence.length - 1) loadTask(sequence[index + 1]);
+  loadRelative(1);
   btnNextTask.blur();
 });
 
 btnContinueNext.addEventListener("click", () => {
-  const index = sequence.indexOf(currentTaskId);
-  if (index !== -1 && index < sequence.length - 1) loadTask(sequence[index + 1]);
+  loadRelative(1);
   btnContinueNext.blur();
 });
 
@@ -740,7 +931,7 @@ player.addEventListener("play", () => {
   presenterSyncInterval = setInterval(() => {
     postToPresenter({ type: "seek-video", seconds: player.currentTime });
   }, 3000);
-  updateSequenceUI();
+  renderSequence();
   updatePauseButtonState();
 });
 
@@ -751,7 +942,7 @@ player.addEventListener("pause", () => {
   clearInterval(presenterSyncInterval);
   postToPresenter({ type: "seek-video", seconds: player.currentTime, force: true });
   postToPresenter({ type: "pause-video" });
-  updateSequenceUI();
+  renderSequence();
   updatePauseButtonState();
 });
 
@@ -767,11 +958,11 @@ player.addEventListener("ended", () => {
   if (currentSegment === "explainer") {
     currentSegment = "main";
     showPauseBeforeTask();
-    updateNowPlayingLabel();
   } else {
     showRestScreen();
   }
-  updateSequenceUI();
+  renderSequence();
+  updateNowBar();
   updatePauseButtonState();
 });
 
@@ -779,11 +970,11 @@ player.addEventListener("error", () => {
   if (!currentVideoPath) return;
   const code = player.error ? player.error.code : "?";
   console.error("Error del reproductor:", currentVideoPath, player.error);
-  currentTaskName.textContent = `⚠ No se pudo reproducir ${fileName(currentVideoPath)} (código ${code})`;
+  nowDetail.textContent = `⚠ No se pudo reproducir ${fileName(currentVideoPath)} (código ${code})`;
 });
 
 function showRestScreen() {
-  const index = sequence.indexOf(currentTaskId);
+  const index = sequence.findIndex((i) => i.id === currentId);
   const isLast = index === -1 || index >= sequence.length - 1;
   btnContinueNext.hidden = isLast;
   btnStartTask.hidden = true;
@@ -804,8 +995,9 @@ function showPauseBeforeTask() {
 }
 
 btnStartTask.addEventListener("click", () => {
-  const def = resolveTaskDef(currentTaskId);
-  if (!def) return;
+  const inst = currentInstance();
+  if (!inst) return;
+  const def = resolveTaskDef(inst.taskId);
   restScreen.hidden = true;
   btnStartTask.hidden = true;
   setVideo(def.video);
@@ -829,10 +1021,15 @@ document.addEventListener("keydown", (event) => {
   if (document.activeElement === player) return;
   const tag = document.activeElement.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
+  // En los paneles plegables, la barra espaciadora abre/cierra el panel.
+  if (tag === "SUMMARY") return;
   event.preventDefault();
   togglePlayPause();
 });
 
+// Estado inicial de la pantalla.
+renderSequence();
+updateNowBar();
 
 // ================== PROTECCIÓN DE LA SESIÓN AL CAMBIAR DE PÁGINA ==================
 // Cada sección del sitio es una página aparte: salir de esta (clic en la
