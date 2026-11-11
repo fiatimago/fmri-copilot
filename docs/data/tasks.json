@@ -3,6 +3,11 @@
     {
       "id": "muni",
       "title": "Tarea motora unilateral",
+      "shortTitle": "Motor unilateral",
+      "guion": {
+        "seccion": "Paradigma motor unilateral"
+      },
+      "manoSeleccionable": true,
       "es": {
         "video": "videos/muni_es_tarea.mp4",
         "explainerVideo": "videos/muni_es_explicativo.mp4"
@@ -15,6 +20,10 @@
     {
       "id": "lh",
       "title": "Tarea de lenguaje historia",
+      "shortTitle": "Lenguaje historia",
+      "guion": {
+        "seccion": "Paradigma lenguaje historia"
+      },
       "es": {
         "video": "videos/lh_es_tarea.mp4",
         "explainerVideo": "videos/lh_es_explicativo.mp4"
@@ -27,6 +36,10 @@
     {
       "id": "lvv",
       "title": "Tarea de lenguaje visoverbal",
+      "shortTitle": "Lenguaje visoverbal",
+      "guion": {
+        "seccion": "Paradigma lenguaje visoverbal"
+      },
       "es": {
         "video": "videos/lvv_es_tarea.mp4",
         "explainerVideo": "videos/lvv_es_explicativo.mp4"
@@ -39,6 +52,10 @@
     {
       "id": "mev",
       "title": "Tarea de memoria episódica verbal",
+      "shortTitle": "Memoria episódica verbal",
+      "guion": {
+        "seccion": "Paradigma memoria episódica verbal"
+      },
       "es": {
         "video": "videos/mev_es_tarea.mp4",
         "explainerVideo": "videos/mev_es_explicativo.mp4"
@@ -51,6 +68,14 @@
     {
       "id": "menv",
       "title": "Tarea de memoria episódica no verbal",
+      "shortTitle": "Memoria episódica no verbal",
+      "guion": {
+        "seccion": "Paradigma memoria episódica no verbal",
+        "subseccionPorLateralidad": {
+          "diestro": "Versión paciente diestro",
+          "zurdo": "Versión paciente zurdo"
+        }
+      },
       "variants": {
         "diestro": {
           "es": {

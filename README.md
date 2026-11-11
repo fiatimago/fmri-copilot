@@ -44,6 +44,13 @@ Publicada en: **https://fiatimago.github.io/fmri-copilot/**
 - **Reporte de la sesión (.txt):** incluye la configuración, la secuencia programada y el registro de lo que realmente pasó: hora de inicio y fin de cada video o secuencia, tiempo efectivo, pausas y si terminó completo o se interrumpió.
 - **Protección de la sesión:** mientras haya una sesión armada, los enlaces de la barra se abren en otra pestaña y el navegador pide confirmación antes de recargar o cerrar.
 
+### Solo en Nueva sesión
+- **Todo en una pantalla:** a la izquierda, fija, la barra **AHORA** (tarea, repetición, mano, explicativo o tarea y posición), el reproductor y los controles; a la derecha, con su propio scroll, los paneles plegables de **Parámetros** y **Guion**, la **Secuencia** y el reporte. Cada panel recuerda si quedó abierto o plegado.
+- **Tareas repetibles:** la misma tarea puede agregarse varias veces (#1, #2…). El explicativo va solo en la primera; en las repeticiones se puede activar con 🎬.
+- **Mano en la tarea motora:** cada tarea motora tiene su selector Der./Izq. (la segunda se propone con la mano que falta). El video es el mismo; cambian el guion y el reporte.
+- **Guion al paciente:** pestañas **Entrevista** y **Tarea actual**, tomadas de `docs/guias/entrevista_paciente.md`. Dice la mano elegida en motor y muestra la versión diestro o zurdo de MENV. Las **activaciones esperadas** van en una sección plegada. En English no se muestra, porque todavía no hay guion en inglés.
+- **Indicador de la pantalla del paciente:** "conectada" o "no abierta".
+
 ### Solo en Investigación
 - **Configuración por tarea:** número de bloques (pares reposo/activación), duración de cada bloque y estímulos por bloque. Si se piden más imágenes de las que hay, se repiten en orden (loop) o aleatorizadas (random), sin mezclar reposo con activación.
 - **El reporte incluye el detalle de imágenes por bloque** en el orden mostrado y el vector de clasificación de cada una: 0 = el paciente permanece quieto, 1 = el paciente mueve el dedo.
@@ -93,6 +100,7 @@ fmri-copilot/
 │   ├── css/style.css
 │   ├── js/
 │   │   ├── session.js            # Lógica de Nueva sesión
+│   │   ├── guion.js              # Guion al paciente (lee la guía de entrevista)
 │   │   ├── investigacion.js      # Lógica de Investigación
 │   │   ├── pantalla.js           # Lógica de la pantalla del paciente
 │   │   └── video-cache.js        # Descarga, caché y duración de los videos
@@ -142,6 +150,9 @@ fmri-copilot/
 - Ruta: `docs/images/<prefijo>/<prefijo>_b<N>_<r|a><i>[_<0|1>].png`. Los bloques impares (`b1`, `b3`…) son reposo (`r`) y los pares son activación (`a`). `i` es la posición de la imagen dentro del bloque, y el sufijo `_0`/`_1` es su etiqueta. `lh` no lleva etiqueta.
 - `docs/data/investigacion-tasks.json` define cada tarea: `prefijo`, `duracionEstandarBloque` (segundos), `standardNumBlocks` (estándar clínico) y `bloques`, con los arreglos de etiquetas de `reposo` y `activacion`.
 - El sitio es estático y **no puede descubrir archivos por sí solo**: el nombre de cada imagen tiene que coincidir con lo que dice el JSON. Si falta alguna, la página lo avisa al cargar la tarea y la consola del navegador (F12) indica cuál es.
+
+### Guion de Nueva sesión
+El guion sale de `docs/guias/entrevista_paciente.md`: para cambiar lo que dice, se edita esa guía. Cada tarea de `tasks.json` dice con qué título empieza su sección (`"guion": { "seccion": "Paradigma motor unilateral" }`), y MENV además qué subsección corresponde a cada lateralidad (`subseccionPorLateralidad`). En las tareas con `"manoSeleccionable": true`, el texto `derecha/izquierda` de la guía se reemplaza por la mano elegida. Si se cambia el título de una sección en la guía, hay que actualizarlo también en `tasks.json`.
 
 ### Agregar o editar una guía
 1. Escribe o edita el `.md` en `docs/guias/` (las imágenes van en `docs/guias/img/`).

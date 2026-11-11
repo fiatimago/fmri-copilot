@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 
-<body>
+<body class="ns-page">
 
     <nav class="navbar">
         <div class="nav-left">
@@ -23,16 +23,18 @@
         </div>
     </nav>
 
-    <section class="view">
-        <div class="session-layout">
+    <main class="ns-layout">
 
-            <div class="panel player-panel">
-                <div class="now-playing" id="now-playing" hidden>
-                    <strong id="current-task-name">—</strong>
-                    <span id="progress-label"></span>
-                </div>
+        <!-- ===== Columna izquierda: fija, sin scroll ===== -->
+        <section class="ns-left panel">
+            <div class="now-bar">
+                <span class="now-label">AHORA</span>
+                <strong id="now-title">Agrega una tarea para empezar</strong>
+                <span id="now-detail"></span>
+            </div>
 
-                <div class="player-section" id="player-container">
+            <div class="ns-player-area">
+                <div class="ns-player-box">
                     <video id="video-player" controls playsinline preload="auto"></video>
 
                     <div class="rest-screen" id="rest-screen" hidden>
@@ -40,22 +42,27 @@
                         <button id="btn-start-task" class="btn-rest-next" hidden>Continuar a la tarea</button>
                     </div>
                 </div>
-
-                <div class="task-nav-bar">
-                    <button id="btn-prev-task" class="btn-secondary" disabled title="Tarea anterior">⏮ Anterior</button>
-                    <button id="btn-pause-nav" class="btn-secondary" disabled
-                        title="Pausar/reanudar el video actual">▶</button>
-                    <button id="btn-next-task" class="btn-secondary" disabled title="Siguiente tarea">Siguiente
-                        ⏭</button>
-                </div>
-
-                <div class="task-nav-bar">
-                    <button id="btn-open-presenter" class="btn-secondary"
-                        title="Abre una ventana sin controles para proyectar al paciente">🖥️ Pantalla del paciente</button>
-                </div>
             </div>
 
-            <div class="panel builder-panel">
+            <div class="ns-controls">
+                <div class="ns-controls-group">
+                    <button id="btn-prev-task" class="btn-secondary" disabled title="Tarea anterior">⏮ Anterior</button>
+                    <button id="btn-pause-nav" class="btn-secondary btn-play" disabled
+                        title="Pausar/reanudar el video actual (barra espaciadora)">▶</button>
+                    <button id="btn-next-task" class="btn-secondary" disabled title="Siguiente tarea">Siguiente ⏭</button>
+                </div>
+                <button id="btn-open-presenter" class="btn-secondary"
+                    title="Abre una ventana sin controles para proyectar al paciente">
+                    🖥️ Pantalla del paciente <span id="presenter-state" class="presenter-state">no abierta</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- ===== Columna derecha: la única con scroll ===== -->
+        <aside class="ns-right">
+
+            <details class="side-panel" id="panel-params" data-remember open>
+                <summary>⚙ Parámetros <span id="params-summary" class="panel-summary"></span></summary>
                 <div class="settings-row">
                     <label class="toggle-switch">
                         <input type="checkbox" id="toggle-explainers" checked>
@@ -74,27 +81,40 @@
                         <button type="button" class="handedness-btn" data-hand="zurdo">Zurdo</button>
                     </div>
                 </div>
+            </details>
 
-                <button id="btn-toggle-tasks" class="btn-secondary">Mostrar tareas disponibles</button>
-
-                <div id="available-tasks-panel" class="tasks-dropdown" hidden>
-                    <ul id="available-tasks-list" class="task-list"></ul>
+            <details class="side-panel" id="panel-guion" data-remember open>
+                <summary>📋 Guion</summary>
+                <div class="guion-tabs">
+                    <button type="button" class="guion-tab active" data-tab="entrevista">Entrevista</button>
+                    <button type="button" class="guion-tab" data-tab="tarea">Tarea actual</button>
                 </div>
+                <div class="guion-body" id="guion-body"></div>
+                <details class="sub-panel" id="panel-activaciones" data-remember hidden>
+                    <summary>Activaciones esperadas</summary>
+                    <div class="activaciones-body" id="activaciones-body"></div>
+                </details>
+            </details>
 
-                <h3>Secuencia de la sesión</h3>
-                <p class="sequence-total" id="sequence-total-duration"></p>
-                <p class="hint" id="preload-status"></p>
-                <button id="btn-download-report" class="btn-secondary" disabled>Descargar reporte de la sesión</button>
+            <section class="side-panel sequence-panel">
+                <div class="sequence-header">
+                    <h3>Secuencia <span id="sequence-count"></span></h3>
+                    <span class="sequence-total" id="sequence-total-duration"></span>
+                </div>
                 <ol id="sequence-list" class="sequence-list"></ol>
-                <p id="sequence-empty-hint" class="hint">Arrastra tareas aquí para armar la secuencia. La primera se
-                    carga
-                    automáticamente.</p>
-            </div>
+                <p id="sequence-empty-hint" class="hint">Agrega tareas con los botones de abajo (o arrástralas
+                    aquí). Se pueden repetir; la primera se carga automáticamente.</p>
+                <p class="hint" id="preload-status"></p>
+                <div class="add-task-buttons" id="add-task-buttons"></div>
+            </section>
 
-        </div>
-    </section>
+            <button id="btn-download-report" class="btn-secondary" disabled>Descargar reporte de la sesión</button>
+        </aside>
+
+    </main>
 
     <script src="js/video-cache.js"></script>
+    <script src="js/guion.js"></script>
     <script src="js/session.js"></script>
 </body>
 
