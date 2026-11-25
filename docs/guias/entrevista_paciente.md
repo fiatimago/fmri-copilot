@@ -101,21 +101,33 @@ Si entendió, por favor mueva el dedo.
 
 ---
 
-## Paradigma auditivo lenguaje historia
+## Paradigma auditivo lenguaje historia (100x20)
 
-*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+En la siguiente tarea escuchará varias frases. Algunas estarán en un idioma que usted no conoce; en esos momentos, solo escúchelas, sin intentar entenderlas. Puede mantener los ojos cerrados.
 
----
+Otras frases estarán en español, cada frase se repetirá varias veces, escúchelas con atención. Tenga en cuenta que las frases en español forman una historia. Es muy importante que preste atención y recuerde la historia, ya que al final le realizaremos algunas preguntas sobre ella. Recuerde no hablar durante la tarea.
 
-## Paradigma auditivo lenguaje visoverbal
-
-*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+Si entendió, por favor mueva el dedo.
 
 ---
 
-## Paradigma auditivo memoria episódica verbal
+## Paradigma auditivo lenguaje visoverbal (150x30)
 
-*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+Esta tarea se divide en dos partes. En la primera, escuchará frases en un idioma que usted no conoce; solo escúchelas, sin intentar entenderlas. Si durante alguna de estas frases escucha un pitido, debe mover una sola vez el dedo de su mano. Puede mantener los ojos cerrados.
+
+En la segunda parte, escuchará frases en español. Si la frase es verdadera, como por ejemplo *"El cielo es azul"*, debe mover el dedo. Si la frase es falsa, como por ejemplo *"Los gatos ladran"*, debe permanecer quieto. Si en algún momento comete un error, no se preocupe: simplemente continúe con la tarea.
+
+Si entendió, por favor mueva el dedo.
+
+---
+
+## Paradigma auditivo memoria episódica verbal (60x20)
+
+Esta tarea tiene dos partes. En la primera parte escuchará frases en un idioma que usted no conoce; solo escúchelas. Si escucha un pitido, debe mover el dedo; de lo contrario, quédese quieto. Puede mantener los ojos cerrados.
+
+En la segunda parte, escuchará frases en español relacionadas con la historia que escuchó anteriormente. Si la frase es verdadera con respecto a la historia, debe mover el dedo; si la frase es falsa con respecto a la historia, debe quedarse quieto. Si comete un error, no se preocupe: continúe con la tarea sin detenerse.
+
+Si entendió, por favor mueva el dedo.
 
 ---
 
