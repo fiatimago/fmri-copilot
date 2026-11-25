@@ -105,6 +105,23 @@
       }
     },
     {
+      "id": "vcal",
+      "title": "Tarea visual de caleidoscopio",
+      "shortTitle": "Visual caleidoscopio",
+      "modalidad": "visual",
+      "guion": {
+        "seccion": "Paradigma visual caleidoscopio"
+      },
+      "es": {
+        "video": "videos/vcal_es_tarea.mp4",
+        "explainerVideo": "videos/vcal_es_explicativo.mp4"
+      },
+      "en": {
+        "video": null,
+        "explainerVideo": null
+      }
+    },
+    {
       "id": "lh_aud",
       "title": "Tarea auditiva de lenguaje historia",
       "shortTitle": "Lenguaje historia (audio)",

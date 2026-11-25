@@ -101,6 +101,19 @@ Si entendió, por favor mueva el dedo.
 
 ---
 
+## Paradigma visual caleidoscopio (150x30)
+
+En esta tarea aparecerá una cruz blanca en la mitad de la pantalla; en esos momentos solo debe mirar la cruz y quedarse quieto. Luego aparecerán imágenes de colores que cambian, como un caleidoscopio; obsérvelas con atención sin mover la cabeza. Recuerde no hablar durante la tarea.
+
+Si entendió, por favor mueva el dedo.
+
+> **Activaciones esperadas**
+>
+> - Activación bilateral de la corteza visual primaria (área 17, a lo largo de la cisura calcarina).
+> - Activación de áreas visuales secundarias y de asociación (áreas 18 y 19).
+
+---
+
 ## Paradigma auditivo lenguaje historia (100x20)
 
 En la siguiente tarea escuchará varias frases. Algunas estarán en un idioma que usted no conoce; en esos momentos, solo escúchelas, sin intentar entenderlas. Puede mantener los ojos cerrados.
