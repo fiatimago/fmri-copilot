@@ -4,6 +4,7 @@
       "id": "muni",
       "title": "Tarea motora unilateral",
       "shortTitle": "Motor unilateral",
+      "modalidad": "visual",
       "guion": {
         "seccion": "Paradigma motor unilateral"
       },
@@ -21,6 +22,7 @@
       "id": "lh",
       "title": "Tarea de lenguaje historia",
       "shortTitle": "Lenguaje historia",
+      "modalidad": "visual",
       "guion": {
         "seccion": "Paradigma lenguaje historia"
       },
@@ -37,6 +39,7 @@
       "id": "lvv",
       "title": "Tarea de lenguaje visoverbal",
       "shortTitle": "Lenguaje visoverbal",
+      "modalidad": "visual",
       "guion": {
         "seccion": "Paradigma lenguaje visoverbal"
       },
@@ -53,6 +56,7 @@
       "id": "mev",
       "title": "Tarea de memoria episódica verbal",
       "shortTitle": "Memoria episódica verbal",
+      "modalidad": "visual",
       "guion": {
         "seccion": "Paradigma memoria episódica verbal"
       },
@@ -69,6 +73,7 @@
       "id": "menv",
       "title": "Tarea de memoria episódica no verbal",
       "shortTitle": "Memoria episódica no verbal",
+      "modalidad": "visual",
       "guion": {
         "seccion": "Paradigma memoria episódica no verbal",
         "subseccionPorLateralidad": {
@@ -97,6 +102,57 @@
             "explainerVideo": null
           }
         }
+      }
+    },
+    {
+      "id": "lh_aud",
+      "title": "Tarea auditiva de lenguaje historia",
+      "shortTitle": "Lenguaje historia (audio)",
+      "modalidad": "auditiva",
+      "guion": {
+        "seccion": "Paradigma auditivo lenguaje historia"
+      },
+      "es": {
+        "video": "videos/lh_aud_es_tarea.mp4",
+        "explainerVideo": "videos/lh_aud_es_explicativo.mp4"
+      },
+      "en": {
+        "video": null,
+        "explainerVideo": null
+      }
+    },
+    {
+      "id": "lvv_aud",
+      "title": "Tarea auditiva de lenguaje visoverbal",
+      "shortTitle": "Lenguaje visoverbal (audio)",
+      "modalidad": "auditiva",
+      "guion": {
+        "seccion": "Paradigma auditivo lenguaje visoverbal"
+      },
+      "es": {
+        "video": "videos/lvv_aud_es_tarea.mp4",
+        "explainerVideo": "videos/lvv_aud_es_explicativo.mp4"
+      },
+      "en": {
+        "video": null,
+        "explainerVideo": null
+      }
+    },
+    {
+      "id": "mev_aud",
+      "title": "Tarea auditiva de memoria episódica verbal",
+      "shortTitle": "Memoria episódica verbal (audio)",
+      "modalidad": "auditiva",
+      "guion": {
+        "seccion": "Paradigma auditivo memoria episódica verbal"
+      },
+      "es": {
+        "video": "videos/mev_aud_es_tarea.mp4",
+        "explainerVideo": "videos/mev_aud_es_explicativo.mp4"
+      },
+      "en": {
+        "video": null,
+        "explainerVideo": null
       }
     }
   ]
