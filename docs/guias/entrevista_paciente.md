@@ -101,6 +101,24 @@ Si entendió, por favor mueva el dedo.
 
 ---
 
+## Paradigma auditivo lenguaje historia
+
+*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+
+---
+
+## Paradigma auditivo lenguaje visoverbal
+
+*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+
+---
+
+## Paradigma auditivo memoria episódica verbal
+
+*Versión auditiva, para pacientes que no pueden ver la pantalla. Pendiente: escribir el guion.*
+
+---
+
 ## Paradigma de memoria de trabajo n-back (150x30)
 
 En esta tarea aparecerá una cruz fija en la mitad de la pantalla; en esos momentos solo debe mirar la cruz y quedarse quieto. Luego aparecerán distintas letras en la pantalla, una por una.

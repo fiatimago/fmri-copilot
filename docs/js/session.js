@@ -83,6 +83,62 @@ function usesExplainer(inst) {
   return explainersEnabled && inst.explainer && !!def.explainerVideo;
 }
 
+// ================== MODALIDAD (visual / auditiva) ==================
+// Las tareas auditivas son para pacientes que no pueden ver la pantalla. Van
+// en su propio grupo de botones y se marcan con 🎧 en la secuencia, pero se
+// reproducen igual que las visuales (el audio sale de esta ventana).
+const MODALITIES = [
+  { id: "visual", label: "Visuales" },
+  { id: "auditiva", label: "Auditivas · para pacientes que no pueden ver" },
+];
+const MODALITY_ICON = { visual: "", auditiva: "🎧" };
+
+function taskModality(taskId) {
+  const meta = taskMeta(taskId);
+  return (meta && meta.modalidad) || "visual";
+}
+
+// ================== VIDEOS QUE TODAVÍA NO SE HAN SUBIDO ==================
+// Una tarea puede estar en tasks.json antes de que su video exista en
+// docs/videos/ (ej. las auditivas mientras se graban). Se pregunta al
+// servidor si el archivo existe: si responde 404, la tarea aparece como
+// "sin video" y no se puede agregar; el explicativo que falte simplemente se
+// omite. Al subir el archivo, la tarea se habilita sola, sin tocar el código.
+// Sin red no se marca nada como faltante (puede estar en el caché).
+const missingFiles = new Set();
+const fileChecks = new Map(); // src → Promise<boolean existe>
+
+function checkFile(src) {
+  if (!src) return Promise.resolve(false);
+  if (!fileChecks.has(src)) {
+    fileChecks.set(src, fetch(src, { method: "HEAD", cache: "no-store" })
+      .then((r) => {
+        if (r.status !== 404) return true;
+        missingFiles.add(src);
+        console.warn("Video aún no subido:", src);
+        onAvailabilityChanged();
+        return false;
+      })
+      .catch(() => true));
+  }
+  return fileChecks.get(src);
+}
+
+// null si la tarea se puede usar; si no, el motivo para mostrarlo.
+function unavailableReason(taskId) {
+  const def = resolveTaskDef(taskId);
+  if (!def) return "no existe";
+  if (!def.declaredVideo) return language === "es" ? "sin video" : "no disponible en este idioma";
+  if (!def.video) return "video pendiente de subir";
+  return null;
+}
+
+function onAvailabilityChanged() {
+  renderAddButtons();
+  renderSequence();
+  updateNowBar();
+}
+
 // Mano propuesta para una tarea motora nueva: la dominante primero; si ya hay
 // una con esa mano y falta la otra, la otra.
 function proposeHand(taskId) {
@@ -250,6 +306,7 @@ function fileName(path) {
 }
 
 const handText = (hand) => (hand ? ` · mano ${hand}` : "");
+const modalityText = (taskId) => (taskModality(taskId) === "auditiva" ? " · auditiva" : "");
 
 function buildSessionReport() {
   const now = new Date();
@@ -276,7 +333,9 @@ function buildSessionReport() {
     let explainerText = "sin explicativo";
     if (usesExplainer(inst)) explainerText = `explicativo ${formatDuration(VideoDurations.get(def.explainerVideo))}`;
     else if (explainersEnabled && inst.explainer && !def.explainerVideo) explainerText = "explicativo no disponible en este idioma";
-    lines.push(`  ${i + 1}. ${instanceLabel(inst)} (${inst.taskId})${handText(inst.hand)} — tarea ${formatDuration(VideoDurations.get(def.video))} | ${explainerText}`);
+    const reason = unavailableReason(inst.taskId);
+    const taskText = reason ? `tarea: ${reason}` : `tarea ${formatDuration(VideoDurations.get(def.video))}`;
+    lines.push(`  ${i + 1}. ${instanceLabel(inst)} (${inst.taskId})${modalityText(inst.taskId)}${handText(inst.hand)} — ${taskText} | ${explainerText}`);
   });
   if (sequence.length > 0) lines.push(`  Duración total estimada: ${formatDuration(computeSequenceTotalSeconds())}`);
   lines.push("");
@@ -290,7 +349,7 @@ function buildSessionReport() {
   if (entries.length === 0) lines.push("  (no se reprodujo ningún video)");
   entries.forEach((s, i) => {
     const end = s.open ? "…" : timeOfDay(s.endedAt);
-    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.label} (${s.taskId})${handText(s.hand)} — ${SEGMENT_LABEL[s.segment]}`);
+    lines.push(`${i + 1}. [${timeOfDay(s.startedAt)} – ${end}] ${s.label} (${s.taskId})${modalityText(s.taskId)}${handText(s.hand)} — ${SEGMENT_LABEL[s.segment]}`);
     lines.push(`   Idioma: ${LANG_LABEL[s.language]} | Lateralidad: ${HANDEDNESS_LABEL[s.handedness]} | Archivo: ${fileName(s.file)}`);
     lines.push(
       `   Duración del video: ${s.videoDurationS ? msToClock(s.videoDurationS * 1000) : "—"} | ` +
@@ -320,7 +379,7 @@ function buildSessionReport() {
       const times = list.length > 1 ? ` (${list.length} veces)` : "";
       return `${anyCompleted ? "completo" : "incompleto"}${times}, reproducido ${msToClock(played)}`;
     };
-    lines.push(`- ${label} (${taskId})${handText(hand)}${inSeq ? "" : " — ya no está en la secuencia"}`);
+    lines.push(`- ${label} (${taskId})${modalityText(taskId)}${handText(hand)}${inSeq ? "" : " — ya no está en la secuencia"}`);
     lines.push(`    Explicativo: ${describe("explainer")}`);
     lines.push(`    Tarea:       ${describe("main")}`);
   });
@@ -370,19 +429,23 @@ function formatDuration(seconds) {
 const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // Devuelve título y rutas de video/explicativo de una tarea, resolviendo
-// lateralidad (ej. MENV) e idioma. explainerVideo es null si no existe en
-// ese idioma (hoy: inglés).
+// lateralidad (ej. MENV) e idioma. video/explainerVideo son null si no
+// existen en ese idioma (tasks.json dice null) o si el archivo todavía no se
+// ha subido (ver checkFile). declaredVideo es la ruta tal cual en tasks.json.
 function resolveTaskDef(taskId) {
   const task = taskMeta(taskId);
   if (!task) return null;
 
   const base = task.variants ? (task.variants[handedness] || task.variants.diestro) : task;
   const langData = base[language] || base.es;
+  const ifUploaded = (src) => (src && !missingFiles.has(src) ? src : null);
 
   return {
     title: task.title,
-    video: langData.video,
-    explainerVideo: langData.explainerVideo || null,
+    declaredVideo: langData.video || null,
+    declaredExplainer: langData.explainerVideo || null,
+    video: ifUploaded(langData.video),
+    explainerVideo: ifUploaded(langData.explainerVideo),
   };
 }
 
@@ -415,13 +478,18 @@ function updateSequenceTotalLabel() {
 
 // Lee la duración real de los videos del idioma/lateralidad actuales y
 // refresca la lista cuando las tiene.
+// Primero confirma que el archivo exista, para no pedirle la duración a un
+// video que aún no se ha subido.
 function probeAllDurations() {
   allTasks.forEach((task) => {
     const def = resolveTaskDef(task.id);
-    [def.video, def.explainerVideo].filter(Boolean).forEach((src) =>
-      VideoDurations.probe(src).then(() => {
-        refreshSequenceDurations();
-        updateSequenceTotalLabel();
+    [def.declaredVideo, def.declaredExplainer].filter(Boolean).forEach((src) =>
+      checkFile(src).then((exists) => {
+        if (!exists) return;
+        VideoDurations.probe(src).then(() => {
+          refreshSequenceDurations();
+          updateSequenceTotalLabel();
+        });
       })
     );
   });
@@ -435,7 +503,7 @@ function videosNeededFor(inst) {
   const def = resolveTaskDef(inst.taskId);
   const srcs = [];
   if (usesExplainer(inst)) srcs.push(def.explainerVideo);
-  srcs.push(def.video);
+  if (def.video) srcs.push(def.video);
   return srcs;
 }
 
@@ -449,6 +517,7 @@ async function preloadSequence() {
 
 // "ready" | "error" | "downloading" | "waiting", y el progreso si descarga.
 function instancePreloadState(inst) {
+  if (unavailableReason(inst.taskId)) return { state: "unavailable" };
   const states = videosNeededFor(inst).map((src) => VideoCache.getState(src));
   if (states.some((s) => s && s.status === "error")) return { state: "error" };
   if (states.every((s) => s && s.status === "ready")) return { state: "ready" };
@@ -468,8 +537,10 @@ function refreshPreloadStatus() {
     const el = sequenceList.querySelector(`.sequence-item[data-instance-id="${inst.id}"] .preload-state`);
     if (!el) return;
     const st = instancePreloadState(inst);
-    el.textContent = st.state === "downloading" ? `⏳ ${Math.round(st.progress * 100)}%` : PRELOAD_TEXT[st.state];
-    el.dataset.state = st.state;
+    el.textContent = st.state === "downloading" ? `⏳ ${Math.round(st.progress * 100)}%`
+      : st.state === "unavailable" ? `⚠ ${unavailableReason(inst.taskId)}`
+      : PRELOAD_TEXT[st.state];
+    el.dataset.state = st.state === "unavailable" ? "error" : st.state;
   });
   if (sequence.length === 0) {
     preloadStatus.textContent = "";
@@ -534,6 +605,7 @@ function updateParamsSummary() {
 
 function onSettingsChanged() {
   updateParamsSummary();
+  renderAddButtons();
   probeAllDurations();
   renderSequence();
   preloadSequence();
@@ -567,29 +639,50 @@ languageButtons.forEach((btn) => {
 updateParamsSummary();
 
 // ================== BOTONES PARA AGREGAR TAREAS ==================
+// Un grupo de botones por modalidad (visuales y auditivas). Un grupo sin
+// tareas en tasks.json no se muestra.
 function renderAddButtons() {
   addTaskButtons.innerHTML = "";
-  allTasks.forEach((task) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "add-task-btn";
-    btn.draggable = true;
-    btn.dataset.taskId = task.id;
-    btn.title = `Agregar «${task.title}» a la secuencia (se puede repetir)`;
-    btn.textContent = `+ ${task.shortTitle || task.title}`;
-    btn.addEventListener("click", () => {
-      addInstance(task.id);
-      btn.blur();
+  MODALITIES.forEach((mod) => {
+    const tasks = allTasks.filter((t) => taskModality(t.id) === mod.id);
+    if (tasks.length === 0) return;
+
+    const group = document.createElement("div");
+    group.className = `add-task-group add-task-group-${mod.id}`;
+    group.innerHTML = `<span class="add-task-group-label">${MODALITY_ICON[mod.id]} ${escapeHtml(mod.label)}</span>`;
+    const row = document.createElement("div");
+    row.className = "add-task-group-buttons";
+
+    tasks.forEach((task) => {
+      const reason = unavailableReason(task.id);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `add-task-btn add-task-btn-${mod.id}`;
+      btn.dataset.taskId = task.id;
+      btn.disabled = !!reason;
+      btn.draggable = !reason;
+      btn.textContent = `+ ${task.shortTitle || task.title}`;
+      btn.title = reason
+        ? `«${task.title}»: ${reason}`
+        : `Agregar «${task.title}» a la secuencia (se puede repetir)`;
+      btn.addEventListener("click", () => {
+        addInstance(task.id);
+        btn.blur();
+      });
+      btn.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", JSON.stringify({ type: "new", taskId: task.id }));
+      });
+      row.appendChild(btn);
     });
-    btn.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "new", taskId: task.id }));
-    });
-    addTaskButtons.appendChild(btn);
+
+    group.appendChild(row);
+    addTaskButtons.appendChild(group);
   });
 }
 
 // ================== AGREGAR / QUITAR / EDITAR INSTANCIAS ==================
 function addInstance(taskId, beforeId = null) {
+  if (unavailableReason(taskId)) return;
   const inst = createInstance(taskId);
   const at = beforeId ? sequence.findIndex((i) => i.id === beforeId) : -1;
   if (at >= 0) sequence.splice(at, 0, inst);
@@ -645,7 +738,7 @@ function renderSequence() {
     const dur = instanceDurationText(inst);
 
     const li = document.createElement("li");
-    li.className = "sequence-item";
+    li.className = `sequence-item modality-${taskModality(inst.taskId)}`;
     li.classList.toggle("current", isCurrent);
     li.classList.toggle("done", done);
     li.classList.toggle("locked", locked);
@@ -673,7 +766,7 @@ function renderSequence() {
       <span class="seq-status" title="${statusTitle}">${status}</span>
       <span class="drag-handle">⠿</span>
       <div class="seq-main">
-        <div class="seq-title">${index + 1}. ${escapeHtml(instanceLabel(inst, true))}</div>
+        <div class="seq-title">${index + 1}. ${MODALITY_ICON[taskModality(inst.taskId)] ? `<span class="modality-badge" title="Tarea auditiva">${MODALITY_ICON[taskModality(inst.taskId)]}</span> ` : ""}${escapeHtml(instanceLabel(inst, true))}</div>
         <div class="seq-meta">${handHtml}${explainerHtml}<small class="preload-state"></small></div>
       </div>
       <span class="task-duration" title="${dur.tooltip}">${dur.text}</span>
@@ -805,6 +898,9 @@ function updateNowBar() {
   if (inst.hand) parts.push(`mano ${inst.hand.toUpperCase()}`);
   parts.push(currentSegment === "explainer" ? "Video explicativo" : "Tarea");
   parts.push(`(${index + 1}/${sequence.length})`);
+  if (taskModality(inst.taskId) === "auditiva") parts.unshift("🎧 auditiva");
+  const reason = unavailableReason(inst.taskId);
+  if (reason) parts.push(`⚠ ${reason}`);
   nowTitle.textContent = instanceLabel(inst);
   nowDetail.textContent = parts.join(" · ");
 }
@@ -852,6 +948,11 @@ function renderGuion() {
 // Carga un archivo en el reproductor, en pausa. Usa la copia descargada si
 // ya está lista; si no, lo lee desde internet mientras termina la descarga.
 function setVideo(path) {
+  if (!path) {
+    // Tarea sin video en este idioma o sin subir: el reproductor queda vacío.
+    unloadVideo();
+    return;
+  }
   currentVideoPath = path;
   player.src = VideoCache.playableUrl(path);
   player.load();
@@ -878,7 +979,7 @@ function loadInstance(id) {
   setVideo(currentSegment === "explainer" ? def.explainerVideo : def.video);
 
   clearInterval(presenterSyncInterval);
-  postToPresenter({ type: "show-video", src: currentVideoPath });
+  postToPresenter(currentVideoPath ? { type: "show-video", src: currentVideoPath } : { type: "show-blank" });
 
   // Ya en plena sesión, al cambiar de tarea el guion salta a "Tarea actual".
   if (changed && sessionLog.length > 0) guionTab = "tarea";
@@ -1001,7 +1102,7 @@ btnStartTask.addEventListener("click", () => {
   restScreen.hidden = true;
   btnStartTask.hidden = true;
   setVideo(def.video);
-  postToPresenter({ type: "show-video", src: def.video });
+  postToPresenter(def.video ? { type: "show-video", src: def.video } : { type: "show-blank" });
   updatePauseButtonState();
   btnStartTask.blur();
 });

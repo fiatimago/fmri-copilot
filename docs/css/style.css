@@ -928,11 +928,51 @@ body {
 
 .add-task-buttons {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 0.6rem;
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
+}
+
+/* Un grupo por modalidad: visuales y auditivas */
+.add-task-group-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.3rem;
+}
+
+.add-task-group-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.add-task-group-auditiva {
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.add-task-btn:disabled {
+  border-color: var(--color-border);
+  color: #94a3b8;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.add-task-btn:disabled:hover {
+  background: #f8fafc;
+}
+
+/* Tareas auditivas en la secuencia */
+.sequence-item.modality-auditiva {
+  border-left: 3px solid var(--color-primary-light);
+}
+
+.modality-badge {
+  font-size: 0.85em;
 }
 
 .add-task-btn {
